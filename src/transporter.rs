@@ -193,26 +193,36 @@ mod tests {
     let _ = logger::try_init();
   }
 
+  const LISTEN_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
+  const LOCAL_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+  const SERVER_PORT: u16 = 7001;
+  const CLIENT_PORT: u16 = 7002;
+
   async fn server_main() {
-    let listen_ip = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
-    let local_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-    let server_port = 7001;
-    let client_port = 7002;
 
     let mut server = UdpTransporter::new("server");
     let mut server_cloned = server.clone();
-    server_cloned.run(listen_ip, server_port).await;
+    let jh1= tokio::spawn(async move { server_cloned.run(LISTEN_IP, SERVER_PORT).await; });
+    let mut server_cloned = server.clone();
+    let f = async move {
+      loop {
+        if let Ok(result) = server_cloned.receive_channel().recv_timeout(Duration::from_secs(1)) {
+          log::debug!("ReceiveMsg = {:?}", result);
+        }
+      }
+    };
+    tokio::spawn(f);
+    jh1.await;
   }
 
   async fn client_main() {
-    let listen_ip = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
-    let local_ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
-    let server_port = 7001;
-    let client_port = 7002;
-
     let mut client = UdpTransporter::new("client");
+    let s = "test";
+    let data = Vec::from(s);
+    client.send(SendMsg::new(LOCAL_IP, SERVER_PORT, data));
+
     let mut client_cloned = client.clone();
-    client_cloned.run(listen_ip, client_port).await;
+    client_cloned.run(LISTEN_IP, CLIENT_PORT).await;
   }
 
   #[tokio::test]
@@ -222,6 +232,7 @@ mod tests {
     let jh1 = tokio::spawn(client_main());
 
     // tokio::time::sleep(Duration::from_secs(10)).await;
+
     jh1.await;
     jh2.await;
   }
