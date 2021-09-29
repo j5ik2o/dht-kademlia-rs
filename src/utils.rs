@@ -1,5 +1,5 @@
-use rand::{Rng, RngCore, thread_rng};
 use crate::node::KadId;
+use rand::{thread_rng, Rng, RngCore};
 
 #[cfg(target_os = "windows")]
 fn get_ip_list() -> Vec<String> {
@@ -36,7 +36,7 @@ fn get_ip_list() -> Vec<String> {
         }
       }
     }
-  };
+  }
   ips
 }
 
@@ -65,5 +65,4 @@ mod tests {
     let first = ip_list.first().unwrap();
     log::debug!("first = {}", first);
   }
-
 }
