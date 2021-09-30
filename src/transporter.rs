@@ -1,12 +1,17 @@
-use crate::actor::{Actor, ActorRef};
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::Mutex;
+use async_trait::async_trait;
 
-pub trait Transporter {}
+#[async_trait]
+pub trait Transporter {
+  async fn stop(&mut self);
+  async fn send(&mut self, msg: Message);
+  async fn run(&mut self, mut msg_tx: Sender<Message>);
+}
 
 #[derive(Clone)]
 pub struct UdpTransporter {
@@ -29,34 +34,20 @@ pub struct Message {
   data: Vec<u8>,
 }
 
-impl UdpTransporter {
-  pub async fn new(ip_addr: IpAddr, port: u16) -> UdpTransporter {
-    let addresses = [SocketAddr::new(ip_addr, port)];
-    let mut socket = UdpSocket::bind(&addresses[..]).await.unwrap();
-    let (tx, rx) = channel(128);
-    Self {
-      inner: Arc::new(Mutex::new(UdpTransporterInner {
-        ip_addr,
-        port,
-        socket,
-        tx,
-        rx,
-        stop_flag: false,
-      })),
-    }
-  }
+#[async_trait]
+impl Transporter for UdpTransporter {
 
-  pub async fn stop(&mut self) {
+  async fn stop(&mut self) {
     let mut lock = self.inner.lock().await;
     lock.stop_flag = true;
   }
 
-  pub async fn send(&mut self, msg: Message) {
+  async fn send(&mut self, msg: Message) {
     let mut lock = self.inner.lock().await;
     lock.tx.send(msg).await;
   }
 
-  pub async fn run(&mut self, mut msg_tx: Sender<Message>) {
+  async fn run(&mut self, msg_tx: Sender<Message>) {
     let self_cloned = self.clone();
     tokio::spawn(async move {
       loop {
@@ -94,10 +85,28 @@ impl UdpTransporter {
   }
 }
 
+impl UdpTransporter {
+  pub async fn new(ip_addr: IpAddr, port: u16) -> UdpTransporter {
+    let addresses = [SocketAddr::new(ip_addr, port)];
+    let mut socket = UdpSocket::bind(&addresses[..]).await.unwrap();
+    let (tx, rx) = channel(128);
+    Self {
+      inner: Arc::new(Mutex::new(UdpTransporterInner {
+        ip_addr,
+        port,
+        socket,
+        tx,
+        rx,
+        stop_flag: false,
+      })),
+    }
+  }
+
+}
+
 #[cfg(test)]
 mod tests {
-  use crate::actor::Actor;
-  use crate::transporter::{Message, UdpTransporter};
+  use crate::transporter::{Message, Transporter, UdpTransporter};
   use std::net::{IpAddr, Ipv4Addr, SocketAddr};
   use std::time::Duration;
   use futures::task::SpawnExt;
