@@ -1,3 +1,4 @@
+#![feature(async_closure)]
 #[cfg(test)]
 extern crate env_logger as logger;
 
