@@ -1,10 +1,12 @@
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::net::UdpSocket;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::Mutex;
 use async_trait::async_trait;
+use futures::TryFutureExt;
 
 #[async_trait]
 pub trait Transporter {
@@ -15,16 +17,10 @@ pub trait Transporter {
 
 #[derive(Clone)]
 pub struct UdpTransporter {
-  inner: Arc<Mutex<UdpTransporterInner>>,
-}
-
-struct UdpTransporterInner {
-  ip_addr: IpAddr,
-  port: u16,
-  socket: UdpSocket,
   tx: Sender<Message>,
-  rx: Receiver<Message>,
-  stop_flag: bool
+  rx: Arc<Mutex<Receiver<Message>>>,
+  terminate: Arc<AtomicBool>,
+  socket: Arc<Mutex<UdpSocket>>,
 }
 
 #[derive(Debug, Clone)]
@@ -36,41 +32,37 @@ pub struct Message {
 
 #[async_trait]
 impl Transporter for UdpTransporter {
-
   async fn stop(&mut self) {
-    let mut lock = self.inner.lock().await;
-    lock.stop_flag = true;
+    self.terminate.store(true, Ordering::Relaxed);
   }
 
   async fn send(&mut self, msg: Message) {
-    let mut lock = self.inner.lock().await;
-    lock.tx.send(msg).await;
+    self.tx.send(msg).await;
   }
 
   async fn run(&mut self, msg_tx: Sender<Message>) {
     let self_cloned = self.clone();
     tokio::spawn(async move {
       loop {
-        let mut lock = self_cloned.inner.lock().await;
-        if lock.stop_flag {
+        if self_cloned.terminate.load(Ordering::Relaxed) {
           break;
         }
-        if let Ok(msg) = lock.rx.try_recv() {
+        let mut rx = self_cloned.rx.lock().await;
+        if let Some(msg) = rx.recv().await {
           log::debug!("send_to = {:?}", msg);
           let addr = SocketAddr::new(msg.ip_addr, msg.port);
-          lock.socket.send_to(&msg.data, addr).await.unwrap();
+          let socket = self_cloned.socket.lock().await;
+          socket.send_to(&msg.data, addr).await.unwrap();
         }
-        drop(lock);
-        tokio::time::sleep(Duration::from_millis(300)).await;
       }
     });
     loop {
-      let lock = self.inner.lock().await;
-      if lock.stop_flag {
+      if self.terminate.load(Ordering::Relaxed) {
         break;
       }
+      let socket= self.socket.lock().await;
       let mut buf = [0; 1500];
-      let result = lock.socket.try_recv_from(&mut buf);
+      let result = socket.try_recv_from(&mut buf);
       if let Ok((_, addr)) = result {
         let msg = Message {
           ip_addr: addr.ip(),
@@ -79,7 +71,7 @@ impl Transporter for UdpTransporter {
         };
         msg_tx.send(msg).await;
       }
-      drop(lock);
+      drop(socket);
       tokio::time::sleep(Duration::from_millis(300)).await;
     }
   }
@@ -88,20 +80,15 @@ impl Transporter for UdpTransporter {
 impl UdpTransporter {
   pub async fn new(ip_addr: IpAddr, port: u16) -> UdpTransporter {
     let addresses = [SocketAddr::new(ip_addr, port)];
-    let mut socket = UdpSocket::bind(&addresses[..]).await.unwrap();
+    let socket = UdpSocket::bind(&addresses[..]).await.unwrap();
     let (tx, rx) = channel(128);
     Self {
-      inner: Arc::new(Mutex::new(UdpTransporterInner {
-        ip_addr,
-        port,
-        socket,
-        tx,
-        rx,
-        stop_flag: false,
-      })),
+      tx,
+      rx: Arc::new(Mutex::new(rx)),
+      terminate: Arc::new(AtomicBool::new(false)),
+      socket: Arc::new(Mutex::new(socket)),
     }
   }
-
 }
 
 #[cfg(test)]
@@ -150,6 +137,7 @@ mod tests {
       port: SERVER_PORT,
       data: Vec::from(msg_data),
     };
+    transporter.send(msg.clone()).await;
     transporter.send(msg.clone()).await;
     transporter.send(msg.clone()).await;
 
