@@ -7,3 +7,9 @@ pub struct Node<ID, ADDRESS> {
   kad_id: ID,
   address: ADDRESS,
 }
+
+impl<ID, ADDRESS> Node<ID, ADDRESS> {
+  pub fn new(kad_id: ID, address: ADDRESS) -> Self {
+    Self { kad_id, address }
+  }
+}
