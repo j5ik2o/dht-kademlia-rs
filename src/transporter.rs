@@ -6,7 +6,6 @@ use tokio::net::UdpSocket;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::Mutex;
 use async_trait::async_trait;
-use futures::TryFutureExt;
 
 #[async_trait]
 pub trait Transporter {
@@ -60,7 +59,7 @@ impl Transporter for UdpTransporter {
       if self.terminate.load(Ordering::Relaxed) {
         break;
       }
-      let socket= self.socket.lock().await;
+      let socket = self.socket.lock().await;
       let mut buf = [0; 1500];
       let result = socket.try_recv_from(&mut buf);
       if let Ok((_, addr)) = result {
@@ -94,11 +93,9 @@ impl UdpTransporter {
 #[cfg(test)]
 mod tests {
   use crate::transporter::{Message, Transporter, UdpTransporter};
-  use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+  use std::net::{IpAddr, Ipv4Addr};
   use std::time::Duration;
-  use futures::task::SpawnExt;
-  use futures::TryFutureExt;
-  use tokio::net::UdpSocket;
+
   use tokio::sync::mpsc::channel;
 
   const LISTEN_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
