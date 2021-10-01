@@ -164,21 +164,24 @@ mod tests {
       }
     });
 
-    let msg_data = "abc";
-    let msg = Message::new(
-      LOCAL_IP,
-      SERVER_PORT,
-      Vec::from(msg_data),
-    );
-    client.send(msg.clone()).await;
-    client.send(msg.clone()).await;
-    client.send(msg.clone()).await;
-
     let mut server_cloned = server.clone();
     let jh1 = tokio::spawn(async move { server_cloned.run(server_tx).await });
 
     let mut client_cloned = client.clone();
     let jh2 = tokio::spawn(async move { client_cloned.run(client_tx).await });
+
+    let mut client_cloned = client.clone();
+    tokio::spawn(async move {
+      let msg_data = "abc";
+      let msg = Message::new(
+        LOCAL_IP,
+        SERVER_PORT,
+        Vec::from(msg_data),
+      );
+      client_cloned.send(msg.clone()).await;
+      client_cloned.send(msg.clone()).await;
+      client_cloned.send(msg.clone()).await;
+    }).await;
 
     tokio::time::sleep(Duration::from_secs(3)).await;
 
