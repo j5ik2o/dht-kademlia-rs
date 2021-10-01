@@ -29,6 +29,6 @@ impl DataStore for InMemoryDataStore {
   }
 
   fn exist(&self, key: &str) -> Result<bool> {
-    Ok(self.store.iter().any(|(k, v)| k == key))
+    Ok(self.store.iter().any(|(k, _v)| k == key))
   }
 }
