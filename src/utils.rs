@@ -1,5 +1,6 @@
+use rand::{RngCore, thread_rng};
+
 use crate::node::KadId;
-use rand::{thread_rng, RngCore};
 
 #[cfg(target_os = "windows")]
 fn get_ip_list() -> Vec<String> {

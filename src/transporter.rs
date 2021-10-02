@@ -1,11 +1,12 @@
 use std::net::{IpAddr, SocketAddr};
-use std::sync::{Arc};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
-use tokio::net::UdpSocket;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::sync::{Mutex};
+
 use async_trait::async_trait;
+use tokio::net::UdpSocket;
+use tokio::sync::Mutex;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 #[async_trait]
 pub trait Transporter {
@@ -107,11 +108,12 @@ impl Transporter for UdpTransporter {
 
 #[cfg(test)]
 mod tests {
-  use crate::transporter::{Message, Transporter, UdpTransporter};
   use std::net::{IpAddr, Ipv4Addr};
   use std::time::Duration;
 
   use tokio::sync::mpsc::channel;
+
+  use crate::transporter::{Message, Transporter, UdpTransporter};
 
   const LISTEN_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
   const LOCAL_IP: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));

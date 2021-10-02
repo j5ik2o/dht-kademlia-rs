@@ -1,6 +1,7 @@
 use std::collections::HashMap;
-use anyhow::Result;
+
 use anyhow::anyhow;
+use anyhow::Result;
 
 pub trait DataStore {
   fn get(&self, key: &str) -> Result<&[u8]>;
