@@ -10,6 +10,7 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 #[async_trait]
 pub trait Transporter {
+  async fn bind(&mut self);
   async fn stop(&mut self);
   async fn send(&mut self, msg: Message);
   async fn run(&mut self, mut msg_tx: Sender<Message>);
@@ -20,7 +21,8 @@ pub struct UdpTransporter {
   tx: Sender<Message>,
   rx: Arc<Mutex<Receiver<Message>>>,
   terminate: Arc<AtomicBool>,
-  socket: Arc<UdpSocket>,
+  socket_addr: Arc<SocketAddr>,
+  socket: Option<Arc<UdpSocket>>,
 }
 
 #[derive(Debug, Clone)]
@@ -41,15 +43,14 @@ impl Message {
 }
 
 impl UdpTransporter {
-  pub async fn new(ip_addr: IpAddr, port: u16) -> UdpTransporter {
-    let addresses = [SocketAddr::new(ip_addr, port)];
-    let socket = UdpSocket::bind(&addresses[..]).await.unwrap();
+  pub fn new(ip_addr: IpAddr, port: u16) -> UdpTransporter {
     let (tx, rx) = channel(128);
     Self {
       tx,
       rx: Arc::new(Mutex::new(rx)),
       terminate: Arc::new(AtomicBool::new(false)),
-      socket: Arc::new(socket),
+      socket_addr: Arc::new(SocketAddr::new(ip_addr, port)),
+      socket: None,
     }
   }
 
@@ -62,14 +63,14 @@ impl UdpTransporter {
       if let Some(msg) = rx.recv().await {
         // log::debug!("send_to = {:?}", msg);
         let addr = SocketAddr::new(msg.ip_addr, msg.port);
-        let _ = self.socket.send_to(&msg.data, addr).await.unwrap();
+        let _ = self.socket.as_ref().unwrap().send_to(&msg.data, addr).await.unwrap();
       }
     }
   }
 
   async fn receive_message_from_downstream(&mut self, msg_tx: Sender<Message>) {
     let mut buf = [0; 1500];
-    let result = self.socket.try_recv_from(&mut buf);
+    let result = self.socket.as_ref().unwrap().try_recv_from(&mut buf);
     if let Ok((_, addr)) = result {
       Self::send_message_to_tx(msg_tx, Vec::from(buf), addr).await;
     }
@@ -83,6 +84,12 @@ impl UdpTransporter {
 
 #[async_trait]
 impl Transporter for UdpTransporter {
+  async fn bind(&mut self) {
+    let addresses = [*self.socket_addr];
+    let socket = UdpSocket::bind(&addresses[..]).await.unwrap();
+    self.socket = Some(Arc::new(socket));
+  }
+
   async fn stop(&mut self) {
     self.terminate.store(true, Ordering::Relaxed);
   }
@@ -110,6 +117,7 @@ impl Transporter for UdpTransporter {
 mod tests {
   use std::net::{IpAddr, Ipv4Addr};
   use std::time::Duration;
+  use futures::SinkExt;
 
   use tokio::sync::mpsc::channel;
 
@@ -127,14 +135,21 @@ mod tests {
     let _ = logger::try_init();
   }
 
+  fn create_transporter(ip_addr: IpAddr, port: u16) -> impl Transporter + Clone {
+    UdpTransporter::new(ip_addr, port)
+  }
+
   #[tokio::test]
   async fn test_transport() {
     init_logger();
     let (server_tx, mut server_rx) = channel::<Message>(128);
     let (client_tx, mut client_rx) = channel::<Message>(128);
 
-    let mut server: UdpTransporter = UdpTransporter::new(LISTEN_IP, SERVER_PORT).await;
-    let mut client: UdpTransporter = UdpTransporter::new(LISTEN_IP, CLIENT_PORT).await;
+    let mut server = create_transporter(LISTEN_IP, SERVER_PORT);
+    let mut client = create_transporter(LISTEN_IP, CLIENT_PORT);
+
+    server.bind().await;
+    client.bind().await;
 
     let mut sever_clone = server.clone();
     tokio::spawn(async move {

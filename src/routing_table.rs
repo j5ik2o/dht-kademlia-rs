@@ -56,6 +56,7 @@ impl RoutingTable for DefaultRoutingTable {
 
   fn find(&self, kid: &KadId) -> Option<&Node> {
     let index = self.index(kid);
+    log::debug!("index = {}", index);
     self.table[index].iter().find(|e| e.id == *kid)
   }
 
@@ -136,8 +137,17 @@ fn xor_inner(kid1: &KadId, kid2: &KadId) -> KadId {
 mod tests {
   use super::*;
 
+  fn init_logger() {
+    use std::env;
+    env::set_var("RUST_LOG", "debug");
+    // env::set_var("RUST_LOG", "trace");
+    let _ = logger::try_init();
+  }
+
+
   #[test]
   fn test_xor() {
+    init_logger();
     let k1 = [0x00; KAD_ID_LEN_BYTES];
     let mut k2 = [0xFF; KAD_ID_LEN_BYTES];
     k2[0] = 0xFE;
@@ -153,6 +163,7 @@ mod tests {
 
   #[test]
   fn test_index() {
+    init_logger();
     let own_id = [0x00; KAD_ID_LEN_BYTES];
     let rt = DefaultRoutingTable::new(own_id);
 
@@ -179,23 +190,30 @@ mod tests {
   struct Args {
     node: Node,
   }
-  struct Test<F> where F: Fn(&dyn RoutingTable) -> (bool, String) {
+  struct Test<F> where F: FnMut(&DefaultRoutingTable) -> (bool, String) {
     name: String,
     fields: Fields,
     args: Args,
     want: bool,
-    finally: F
+    finally: Option<F>
   }
 
   #[test]
   fn test_add() {
+    init_logger();
     let mut own_id = [0x00; KAD_ID_LEN_BYTES];
     own_id[0] = 0x01;
     let mut node_id = [0x00; KAD_ID_LEN_BYTES];
     node_id[19] = 0x01;
     let node = Node::new(node_id, None);
-    let table = Vec::with_capacity(KAD_ID_LEN);
-    [
+    let node_cloned = node.clone();
+
+    let mut table = Vec::with_capacity(KAD_ID_LEN);
+    for _ in 0..KAD_ID_LEN {
+      table.push(Vec::new());
+    }
+
+    let tests = [
       Test{
         name: "simple add node".to_owned(),
         fields: Fields {
@@ -206,12 +224,36 @@ mod tests {
           node
         },
         want: true,
-        finally: |rt| {
-
-          (true, "".to_owned())
-        }
+        finally: Some(move |rt: &DefaultRoutingTable | {
+          let index = rt.index(&node_cloned.id);
+          if let Some(e) = rt.table[index].first() {
+            (true, "".to_owned())
+          } else {
+            (false, "".to_owned())
+          }
+        })
       }
     ];
+
+    for mut tt in tests {
+      let mut rt = DefaultRoutingTable {
+        own_id: tt.fields.own_id,
+        table: tt.fields.table,
+      };
+
+      let got = rt.add(tt.args.node.clone());
+      if got != tt.want {
+        log::warn!("routingTable.add() got = {}, want {}", got, tt.want);
+      }
+
+      if let Some(f) = tt.finally {
+        let (result, msg) = f(&rt);
+        assert!(result);
+        if !result {
+          log::error!("msg = {}", msg);
+        }
+      }
+    }
   }
 
 
