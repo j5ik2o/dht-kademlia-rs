@@ -6,3 +6,4 @@ pub mod datastore;
 pub mod node;
 pub mod transporter;
 pub mod utils;
+pub mod routing_table;
