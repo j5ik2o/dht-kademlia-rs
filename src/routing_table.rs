@@ -1,4 +1,5 @@
-use crate::node::{KAD_ID_LEN, KadId, Node};
+use std::cmp::Ordering;
+use crate::node::{KAD_ID_LEN, KAD_ID_LEN_BYTES, KadId, Node};
 
 pub struct DefaultRoutingTable {
   own_id: KadId,
@@ -6,55 +7,212 @@ pub struct DefaultRoutingTable {
 }
 
 impl DefaultRoutingTable {
-  pub fn new(own_id: KadId,) -> Self {
+  pub fn new(own_id: KadId) -> Self {
+    let mut table = Vec::with_capacity(KAD_ID_LEN);
+    for _ in 0..KAD_ID_LEN {
+      table.push(Vec::new());
+    }
     Self {
       own_id,
-      table: Vec::with_capacity(KAD_ID_LEN)
+      table
     }
   }
 }
 
 pub trait RoutingTable {
+  fn own_id(&self) -> &KadId;
   fn add(&mut self, node: Node) -> bool;
-  fn find(&self, kid: &KadId) -> Option<&Node> ;
+  fn del(&mut self, kid: &KadId);
+  fn find(&self, kid: &KadId) -> Option<&Node>;
+  fn closer(&mut self, kid: &KadId) -> Vec<Node>;
   fn index(&self, kid: &KadId) -> usize;
-//  func (rt *routingTable) index(kid *KadID) int
+  fn xor(&self, kid: &KadId) -> KadId;
 }
 
 const BUCKET_SIZE: usize = 20;
 
 impl RoutingTable for DefaultRoutingTable {
+  fn own_id(&self) -> &KadId {
+    &self.own_id
+  }
+
   fn add(&mut self, node: Node) -> bool {
     let index = self.index(&node.id);
-    if node.id != self.own_id && self.find(&node.id) == None && self.table[index].len() <= BUCKET_SIZE {
+    if node.id != self.own_id && self.find(&node.id).is_none() && self.table[index].len() <= BUCKET_SIZE {
       self.table[index].push(node);
       true
     } else {
       false
     }
   }
-  fn find(&self, kid: &KadId) -> Option<&Node> {
-    todo!()
+
+  fn del(&mut self, kid: &KadId) {
+    let index = self.index(kid);
+    let position_opt = self.table[index].iter().position(|e| e.id == *kid);
+    if let Some(position) = position_opt {
+      self.table[index].remove(position);
+    }
   }
+
+  fn find(&self, kid: &KadId) -> Option<&Node> {
+    let index = self.index(kid);
+    self.table[index].iter().find(|e| e.id == *kid)
+  }
+
+  fn closer(&mut self, kid: &KadId) -> Vec<Node> {
+    let closest_index = self.index(kid);
+    let mut nodes = self.table[closest_index].clone();
+    for i in 1..KAD_ID_LEN {
+      let upper = closest_index + i;
+      let lower = closest_index - i;
+      let mut tmp = Vec::<Node>::new();
+      if upper < KAD_ID_LEN {
+        let iter = self.table[upper].clone();
+        tmp.extend(iter);
+      }
+      if lower >= 0 {
+        tmp.extend(self.table[lower].clone());
+      }
+      tmp.sort_by(|ia, jb| {
+        let i_xor = xor_inner(&ia.id, kid);
+        let j_xor = xor_inner(&jb.id, kid);
+        let mut result = Ordering::Equal;
+        for ii in 0..KAD_ID_LEN_BYTES {
+          if i_xor[ii] == j_xor[ii] {
+            continue;
+          }
+          if i_xor[ii] < j_xor[ii] {
+            result = Ordering::Greater;
+            break;
+          } else {
+            result = Ordering::Less;
+            break;
+          }
+        }
+        result
+      });
+      nodes.extend(tmp);
+      if nodes.len() >= BUCKET_SIZE {
+        return nodes.split_off(BUCKET_SIZE - 1);
+      }
+    }
+    nodes
+  }
+
 
   fn index(&self, kid: &KadId) -> usize {
-    todo!()
+    let distance = self.xor(kid);
+    let mut first_bit_index = 0;
+    for v in distance {
+      if v == 0 {
+        first_bit_index += 8;
+        continue;
+      }
+      for i in 0..8 {
+        if v & (0x80 >> i as u32) != 0 {
+          break;
+        }
+        first_bit_index += 1;
+      }
+      break;
+    }
+    first_bit_index
+  }
+
+  fn xor(&self, kid: &KadId) -> KadId {
+    xor_inner(self.own_id(), kid)
   }
 }
 
-fn xor(kid1: &KadId, kid2: &KadId2) -> &KadId {
+fn xor_inner(kid1: &KadId, kid2: &KadId) -> KadId {
   let mut xor = KadId::default();
-  for i in kid1 {
-
+  for i in 0..kid1.len() {
+    xor[i] = kid1[i] ^ kid2[i];
   }
+  xor
 }
 
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_xor() {
+    let k1 = [0x00; KAD_ID_LEN_BYTES];
+    let mut k2 = [0xFF; KAD_ID_LEN_BYTES];
+    k2[0] = 0xFE;
+
+    let rt = DefaultRoutingTable::new(k1);
+    let xor = rt.xor(&k2);
+
+    let mut ans = [0xFF; KAD_ID_LEN_BYTES];
+    ans[0] = 0xFE;
+
+    assert_eq!(xor, ans);
+  }
+
+  #[test]
+  fn test_index() {
+    let own_id = [0x00; KAD_ID_LEN_BYTES];
+    let rt = DefaultRoutingTable::new(own_id);
+
+    let mut k1 = [0x00; KAD_ID_LEN_BYTES];
+    k1[0] = 0xFF;
+    let index1 = rt.index(&k1);
+    assert_eq!(index1, 0);
+
+    let mut k2 =  [0x00; KAD_ID_LEN_BYTES];
+    k2[k2.len() -1] = 0x01;
+    let index2 = rt.index(&k2);
+    assert_eq!(index2, KAD_ID_LEN-1);
+
+    let mut k3 = [0x00; KAD_ID_LEN_BYTES];
+    k3[10] = 0x0F;
+    let index3 = rt.index(&k3);
+    assert_eq!(index3, 8*10+4);
+  }
+
+  struct Fields {
+    own_id: KadId,
+    table: Vec<Vec<Node>>
+  }
+  struct Args {
+    node: Node,
+  }
+  struct Test<F> where F: Fn(&dyn RoutingTable) -> (bool, String) {
+    name: String,
+    fields: Fields,
+    args: Args,
+    want: bool,
+    finally: F
+  }
+
+  #[test]
+  fn test_add() {
+    let mut own_id = [0x00; KAD_ID_LEN_BYTES];
+    own_id[0] = 0x01;
+    let mut node_id = [0x00; KAD_ID_LEN_BYTES];
+    node_id[19] = 0x01;
+    let node = Node::new(node_id, None);
+    let table = Vec::with_capacity(KAD_ID_LEN);
+    [
+      Test{
+        name: "simple add node".to_owned(),
+        fields: Fields {
+          own_id,
+          table
+        },
+        args: Args {
+          node
+        },
+        want: true,
+        finally: |rt| {
+
+          (true, "".to_owned())
+        }
+      }
+    ];
+  }
 
 
-// func xor(kid1 *KadID, kid2 *KadID) *KadID {
-// xor := &KadID{}
-// for i := range kid1 {
-// xor[i] = kid1[i] ^ kid2[i]
-// }
-// return xor
-// }
+}
