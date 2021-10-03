@@ -11,12 +11,12 @@ pub struct KademliaMessage {
 
 #[derive(Serialize, Deserialize)]
 pub enum Query {
-  PingQuery{
+  PingQuery {
     target: KadId,
   },
   StoreQuery {
     key: String,
-    data: Vec<u8>
+    data: Vec<u8>,
   },
   FindNodeQuery {
     target: KadId,
@@ -28,7 +28,7 @@ pub enum Query {
     target: KadId,
   },
   StoreReply {
-    success: bool
+    success: bool,
   },
   FindNodeReply {
     key: String,
@@ -36,7 +36,7 @@ pub enum Query {
     closest: Vec<Node>,
   },
   FindValueReply {
-    key: String
+    key: String,
   },
 }
 
@@ -44,8 +44,5 @@ pub enum Query {
 mod tests {
 
   #[test]
-  fn test() {
-
-  }
-
+  fn test() {}
 }

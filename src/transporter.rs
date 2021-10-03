@@ -63,7 +63,13 @@ impl UdpTransporter {
       if let Some(msg) = rx.recv().await {
         // log::debug!("send_to = {:?}", msg);
         let addr = SocketAddr::new(msg.ip_addr, msg.port);
-        let _ = self.socket.as_ref().unwrap().send_to(&msg.data, addr).await.unwrap();
+        let _ = self
+          .socket
+          .as_ref()
+          .unwrap()
+          .send_to(&msg.data, addr)
+          .await
+          .unwrap();
       }
     }
   }

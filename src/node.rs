@@ -17,19 +17,8 @@ pub struct KadId(ByteArray);
 
 #[derive(Debug, Error, Clone, PartialEq)]
 pub enum KadIdError {
-
-  #[error("generate random error: msg = {msg}")]
-  GenerateRandomError { msg: String },
-  #[error("invalid length")]
-  InvalidLength,
-  #[error("invalid the char: {0}")]
-  InvalidChar(char),
-  #[error("data type overflow")]
-  DataTypeOverflow,
-  #[error("data must be 16 bytes in length!")]
+  #[error("Invalid byte array")]
   InvalidByteArrayError,
-  #[error("ulidString must not exceed '7ZZZZZZZZZZZZZZZZZZZZZZZZZ'!")]
-  TimestampOverflowError,
 }
 
 impl KadId {
@@ -42,16 +31,12 @@ impl KadId {
   pub fn parse_from_base64str(s: &str) -> Result<KadId, KadIdError> {
     let br = base64::decode(s);
     match br {
-      Err(e) => {
-        Err(KadIdError::InvalidByteArrayError)
-      }
+      Err(e) => Err(KadIdError::InvalidByteArrayError),
       Ok(b) => {
         let ba = b.try_into();
         match ba {
-          Ok(b) => {
-            KadId::new(b)
-          }
-          Err(e) => Err(KadIdError::DataTypeOverflow)
+          Ok(b) => Ok(KadId::new(b)),
+          Err(_) => Err(KadIdError::InvalidByteArrayError),
         }
       }
     }
@@ -77,62 +62,29 @@ impl KadId {
 }
 
 impl Serialize for KadId {
-  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+  fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: Serializer,
+  {
     serializer.serialize_str(&self.to_base64())
   }
 }
 
-// struct KadIdVisitor;
-//
-// impl<'de> Visitor<'de> for KadIdVisitor {
-//   type Value = KadId;
-//
-//   fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-//     formatter.write_str("an integer between -2^31 and 2^31")
-//   }
-//
-//   fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where E: Error {
-//     log::debug!("Visitor:v = {}", v);
-//     Ok(v.into())
-//   }
-//
-//   fn visit_string<E>(self, v: String) -> Result<Self::Value, E> where E: serde::de::Error {
-//     log::debug!("Visitor:v = {}", v);
-//     Ok(v.into())
-//   }
-// }
-
 impl<'de> Deserialize<'de> for KadId {
-  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
-    // let deserialized_str = String::deserialize(deserializer)?;
-    // deserialized_str.parse::<KadId>().map_err(serde::de::Error::custom)
-    todo!()
+  fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  where
+    D: Deserializer<'de>,
+  {
+    let deserialized_str = String::deserialize(deserializer)?;
+    let s = KadId::parse_from_base64str(&deserialized_str).map_err(serde::de::Error::custom);
+    log::debug!("de:s = {:?}", s);
+    s
   }
 }
 
 impl Default for KadId {
   fn default() -> Self {
     Self([0; KAD_ID_LEN_BYTES])
-  }
-}
-
-impl FromStr for KadId {
-  type Err = KadIdError;
-
-  fn from_str(s: &str) -> Result<Self, Self::Err> {
-
-    // let s = base64::decode(s).unwrap();
-    // let ss = s.try_into().unwrap();
-    // Ok(Self::new(ss))
-    todo!()
-  }
-}
-
-impl TryFrom<ByteArray> for KadId {
-  type Error = KadIdError;
-
-  fn try_from(value: ByteArray) -> Result<Self, Self::Error> {
-    todo!()
   }
 }
 
@@ -143,13 +95,13 @@ impl From<String> for KadId {
   }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Node {
   pub(crate) id: KadId,
   pub(crate) meta: Option<NodeMeta>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeMeta {
   ip_addr: IpAddr,
   port: u16,
@@ -172,15 +124,26 @@ mod tests {
     let _ = logger::try_init();
   }
   #[test]
-  fn test() {
+  fn test_kid() {
     init_logger();
-/*    let mut own_id = [0x00; KAD_ID_LEN_BYTES];
+    let mut own_id = [0x00; KAD_ID_LEN_BYTES];
     own_id[0] = 0x01;
-    let node = Node::new(own_id.into(), None);
-    let s = serde_json::to_string(&node).unwrap();
+    let kid = KadId::new(own_id);
+    let s = serde_json::to_string(&kid).unwrap();
     log::debug!("s = {}", s);
-    let kid: KadId = serde_json::from_str(&s).unwrap();
-    log::debug!("kid = {:?}", kid);*/
+    let kid2: KadId = serde_json::from_str(&s).unwrap();
+    log::debug!("kid = {:?}", kid2);
+    assert_eq!(kid, kid2)
   }
 
+  #[test]
+  fn test_node() {
+    init_logger();
+    let kid = KadId::generate();
+    let node1 = Node::new(kid, None);
+    let s = serde_json::to_string(&node1).unwrap();
+    log::debug!("s = {}", s);
+    let node2: Node = serde_json::from_str(&s).unwrap();
+    log::debug!("n = {:?}", node2);
+  }
 }

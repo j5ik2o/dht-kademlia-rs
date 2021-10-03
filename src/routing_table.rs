@@ -12,10 +12,7 @@ impl DefaultRoutingTable {
     for _ in 0..KAD_ID_LEN {
       table.push(Vec::new());
     }
-    Self {
-      own_id,
-      table
-    }
+    Self { own_id, table }
   }
 }
 
@@ -38,7 +35,10 @@ impl RoutingTable for DefaultRoutingTable {
 
   fn add(&mut self, node: Node) -> bool {
     let index = self.index(&node.id);
-    if node.id != self.own_id && self.find(&node.id).is_none() && self.table[index].len() <= BUCKET_SIZE {
+    if node.id != self.own_id
+      && self.find(&node.id).is_none()
+      && self.table[index].len() <= BUCKET_SIZE
+    {
       self.table[index].push(node);
       true
     } else {
@@ -100,7 +100,6 @@ impl RoutingTable for DefaultRoutingTable {
     nodes
   }
 
-
   fn index(&self, kid: &KadId) -> usize {
     let distance = self.xor(kid);
     let mut first_bit_index = 0;
@@ -145,7 +144,6 @@ mod tests {
     let _ = logger::try_init();
   }
 
-
   #[test]
   fn test_xor() {
     init_logger();
@@ -179,34 +177,37 @@ mod tests {
     let index1 = rt.index(&k1);
     assert_eq!(index1, 0);
 
-    let mut k2_v =  [0x00; KAD_ID_LEN_BYTES];
-    k2_v[k2_v.len() -1] = 0x01;
+    let mut k2_v = [0x00; KAD_ID_LEN_BYTES];
+    k2_v[k2_v.len() - 1] = 0x01;
     let k2 = KadId::new(k2_v);
 
     let index2 = rt.index(&k2);
-    assert_eq!(index2, KAD_ID_LEN-1);
+    assert_eq!(index2, KAD_ID_LEN - 1);
 
     let mut k3_v = [0x00; KAD_ID_LEN_BYTES];
     k3_v[10] = 0x0F;
     let k3 = KadId::new(k3_v);
 
     let index3 = rt.index(&k3);
-    assert_eq!(index3, 8*10+4);
+    assert_eq!(index3, 8 * 10 + 4);
   }
 
   struct Fields {
     own_id: KadId,
-    table: Vec<Vec<Node>>
+    table: Vec<Vec<Node>>,
   }
   struct Args {
     node: Node,
   }
-  struct Test<F> where F: FnMut(&DefaultRoutingTable) -> (bool, String) {
+  struct Test<F>
+  where
+    F: FnMut(&DefaultRoutingTable) -> (bool, String),
+  {
     name: String,
     fields: Fields,
     args: Args,
     want: bool,
-    finally: Option<F>
+    finally: Option<F>,
   }
 
   #[test]
@@ -228,27 +229,20 @@ mod tests {
       table.push(Vec::new());
     }
 
-    let tests = [
-      Test{
-        name: "simple add node".to_owned(),
-        fields: Fields {
-          own_id,
-          table
-        },
-        args: Args {
-          node
-        },
-        want: true,
-        finally: Some(move |rt: &DefaultRoutingTable | {
-          let index = rt.index(&node_cloned.id);
-          if let Some(e) = rt.table[index].first() {
-            (true, "".to_owned())
-          } else {
-            (false, "".to_owned())
-          }
-        })
-      }
-    ];
+    let tests = [Test {
+      name: "simple add node".to_owned(),
+      fields: Fields { own_id, table },
+      args: Args { node },
+      want: true,
+      finally: Some(move |rt: &DefaultRoutingTable| {
+        let index = rt.index(&node_cloned.id);
+        if let Some(e) = rt.table[index].first() {
+          (true, "".to_owned())
+        } else {
+          (false, "".to_owned())
+        }
+      }),
+    }];
 
     for mut tt in tests {
       let mut rt = DefaultRoutingTable {
@@ -270,6 +264,4 @@ mod tests {
       }
     }
   }
-
-
 }
