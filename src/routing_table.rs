@@ -79,10 +79,10 @@ impl RoutingTable for DefaultRoutingTable {
         let j_xor = xor_inner(&jb.id, kid);
         let mut result = Ordering::Equal;
         for ii in 0..KAD_ID_LEN_BYTES {
-          if i_xor[ii] == j_xor[ii] {
+          if i_xor.part(ii) == j_xor.part(ii) {
             continue;
           }
-          if i_xor[ii] < j_xor[ii] {
+          if i_xor.part(ii) < j_xor.part(ii) {
             result = Ordering::Greater;
             break;
           } else {
@@ -104,8 +104,8 @@ impl RoutingTable for DefaultRoutingTable {
   fn index(&self, kid: &KadId) -> usize {
     let distance = self.xor(kid);
     let mut first_bit_index = 0;
-    for v in distance {
-      if v == 0 {
+    for v in distance.get() {
+      if *v == 0 {
         first_bit_index += 8;
         continue;
       }
@@ -127,8 +127,9 @@ impl RoutingTable for DefaultRoutingTable {
 
 fn xor_inner(kid1: &KadId, kid2: &KadId) -> KadId {
   let mut xor = KadId::default();
-  for i in 0..kid1.len() {
-    xor[i] = kid1[i] ^ kid2[i];
+  for i in 0..KAD_ID_LEN_BYTES {
+    let v = kid1.part(i) ^ kid2.part(i);
+    xor.update_part(i, v);
   }
   xor
 }
@@ -148,9 +149,11 @@ mod tests {
   #[test]
   fn test_xor() {
     init_logger();
-    let k1 = [0x00; KAD_ID_LEN_BYTES];
-    let mut k2 = [0xFF; KAD_ID_LEN_BYTES];
-    k2[0] = 0xFE;
+    let k1_v = [0x00; KAD_ID_LEN_BYTES];
+    let mut k2_v = [0xFF; KAD_ID_LEN_BYTES];
+    k2_v[0] = 0xFE;
+    let k1 = KadId::new(k1_v);
+    let k2 = KadId::new(k2_v);
 
     let rt = DefaultRoutingTable::new(k1);
     let xor = rt.xor(&k2);
@@ -158,27 +161,35 @@ mod tests {
     let mut ans = [0xFF; KAD_ID_LEN_BYTES];
     ans[0] = 0xFE;
 
-    assert_eq!(xor, ans);
+    assert_eq!(xor.get(), ans);
   }
 
   #[test]
   fn test_index() {
     init_logger();
-    let own_id = [0x00; KAD_ID_LEN_BYTES];
+    let own_id_v = [0x00; KAD_ID_LEN_BYTES];
+    let own_id = KadId::new(own_id_v);
+
     let rt = DefaultRoutingTable::new(own_id);
 
-    let mut k1 = [0x00; KAD_ID_LEN_BYTES];
-    k1[0] = 0xFF;
+    let mut k1_v = [0x00; KAD_ID_LEN_BYTES];
+    k1_v[0] = 0xFF;
+    let k1 = KadId::new(k1_v);
+
     let index1 = rt.index(&k1);
     assert_eq!(index1, 0);
 
-    let mut k2 =  [0x00; KAD_ID_LEN_BYTES];
-    k2[k2.len() -1] = 0x01;
+    let mut k2_v =  [0x00; KAD_ID_LEN_BYTES];
+    k2_v[k2_v.len() -1] = 0x01;
+    let k2 = KadId::new(k2_v);
+
     let index2 = rt.index(&k2);
     assert_eq!(index2, KAD_ID_LEN-1);
 
-    let mut k3 = [0x00; KAD_ID_LEN_BYTES];
-    k3[10] = 0x0F;
+    let mut k3_v = [0x00; KAD_ID_LEN_BYTES];
+    k3_v[10] = 0x0F;
+    let k3 = KadId::new(k3_v);
+
     let index3 = rt.index(&k3);
     assert_eq!(index3, 8*10+4);
   }
@@ -201,10 +212,14 @@ mod tests {
   #[test]
   fn test_add() {
     init_logger();
-    let mut own_id = [0x00; KAD_ID_LEN_BYTES];
-    own_id[0] = 0x01;
-    let mut node_id = [0x00; KAD_ID_LEN_BYTES];
-    node_id[19] = 0x01;
+    let mut own_id_v = [0x00; KAD_ID_LEN_BYTES];
+    own_id_v[0] = 0x01;
+    let own_id = KadId::new(own_id_v);
+
+    let mut node_id_v = [0x00; KAD_ID_LEN_BYTES];
+    node_id_v[19] = 0x01;
+    let node_id = KadId::new(node_id_v);
+
     let node = Node::new(node_id, None);
     let node_cloned = node.clone();
 

@@ -44,7 +44,7 @@ fn get_ip_list() -> Vec<String> {
 fn generate_random_kad_id() -> KadId {
   let mut rng = thread_rng();
   let mut values = KadId::default();
-  rng.fill_bytes(&mut values);
+  rng.fill_bytes(values.get_mut());
   values
 }
 
