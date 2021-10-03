@@ -1,17 +1,62 @@
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::fmt::Formatter;
 use std::net::IpAddr;
+use std::str::FromStr;
+use rand::{RngCore, thread_rng};
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
-use serde::de::Visitor;
+use serde::de::{Error, Visitor};
+use thiserror::Error;
 
 pub const KAD_ID_LEN: usize = 160;
 pub const KAD_ID_LEN_BYTES: usize = KAD_ID_LEN / 8;
 
-#[derive(Clone, PartialOrd, PartialEq)]
-pub struct KadId([u8; KAD_ID_LEN_BYTES]);
+pub type ByteArray = [u8; KAD_ID_LEN_BYTES];
+
+#[derive(Debug, Clone, PartialOrd, PartialEq)]
+pub struct KadId(ByteArray);
+
+#[derive(Debug, Error, Clone, PartialEq)]
+pub enum KadIdError {
+
+  #[error("generate random error: msg = {msg}")]
+  GenerateRandomError { msg: String },
+  #[error("invalid length")]
+  InvalidLength,
+  #[error("invalid the char: {0}")]
+  InvalidChar(char),
+  #[error("data type overflow")]
+  DataTypeOverflow,
+  #[error("data must be 16 bytes in length!")]
+  InvalidByteArrayError,
+  #[error("ulidString must not exceed '7ZZZZZZZZZZZZZZZZZZZZZZZZZ'!")]
+  TimestampOverflowError,
+}
 
 impl KadId {
-  pub fn new(v: [u8; KAD_ID_LEN_BYTES]) -> Self {
+  pub fn generate() -> KadId {
+    let mut rng = thread_rng();
+    let mut values = [0u8; KAD_ID_LEN_BYTES];
+    rng.fill_bytes(&mut values);
+    KadId::new(values)
+  }
+  pub fn parse_from_base64str(s: &str) -> Result<KadId, KadIdError> {
+    let br = base64::decode(s);
+    match br {
+      Err(e) => {
+        Err(KadIdError::InvalidByteArrayError)
+      }
+      Ok(b) => {
+        let ba = b.try_into();
+        match ba {
+          Ok(b) => {
+            KadId::new(b)
+          }
+          Err(e) => Err(KadIdError::DataTypeOverflow)
+        }
+      }
+    }
+  }
+  pub fn new(v: ByteArray) -> Self {
     Self(v)
   }
   pub fn update_part(&mut self, pos: usize, v: u8) {
@@ -37,23 +82,31 @@ impl Serialize for KadId {
   }
 }
 
-struct KadIdVisitor;
-
-impl<'de> Visitor<'de> for KadIdVisitor {
-  type Value = KadId;
-
-  fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-    formatter.write_str("an integer between -2^31 and 2^31")
-  }
-
-  fn visit_string<E>(self, v: String) -> Result<Self::Value, E> where E: serde::de::Error {
-    Ok(v.into())
-  }
-}
+// struct KadIdVisitor;
+//
+// impl<'de> Visitor<'de> for KadIdVisitor {
+//   type Value = KadId;
+//
+//   fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+//     formatter.write_str("an integer between -2^31 and 2^31")
+//   }
+//
+//   fn visit_str<E>(self, v: &str) -> Result<Self::Value, E> where E: Error {
+//     log::debug!("Visitor:v = {}", v);
+//     Ok(v.into())
+//   }
+//
+//   fn visit_string<E>(self, v: String) -> Result<Self::Value, E> where E: serde::de::Error {
+//     log::debug!("Visitor:v = {}", v);
+//     Ok(v.into())
+//   }
+// }
 
 impl<'de> Deserialize<'de> for KadId {
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
-    deserializer.deserialize_string(KadIdVisitor)
+    // let deserialized_str = String::deserialize(deserializer)?;
+    // deserialized_str.parse::<KadId>().map_err(serde::de::Error::custom)
+    todo!()
   }
 }
 
@@ -62,11 +115,27 @@ impl Default for KadId {
     Self([0; KAD_ID_LEN_BYTES])
   }
 }
-impl From<[u8; KAD_ID_LEN_BYTES]> for KadId {
-  fn from(v: [u8; KAD_ID_LEN_BYTES]) -> Self {
-    Self(v)
+
+impl FromStr for KadId {
+  type Err = KadIdError;
+
+  fn from_str(s: &str) -> Result<Self, Self::Err> {
+
+    // let s = base64::decode(s).unwrap();
+    // let ss = s.try_into().unwrap();
+    // Ok(Self::new(ss))
+    todo!()
   }
 }
+
+impl TryFrom<ByteArray> for KadId {
+  type Error = KadIdError;
+
+  fn try_from(value: ByteArray) -> Result<Self, Self::Error> {
+    todo!()
+  }
+}
+
 impl From<String> for KadId {
   fn from(v: String) -> Self {
     let s = base64::decode(v).unwrap().try_into().unwrap();
@@ -105,11 +174,13 @@ mod tests {
   #[test]
   fn test() {
     init_logger();
-    let mut own_id = [0x00; KAD_ID_LEN_BYTES];
+/*    let mut own_id = [0x00; KAD_ID_LEN_BYTES];
     own_id[0] = 0x01;
     let node = Node::new(own_id.into(), None);
     let s = serde_json::to_string(&node).unwrap();
     log::debug!("s = {}", s);
+    let kid: KadId = serde_json::from_str(&s).unwrap();
+    log::debug!("kid = {:?}", kid);*/
   }
 
 }
