@@ -1,10 +1,10 @@
-use std::convert::{TryFrom, TryInto};
-use std::fmt::Formatter;
+use std::convert::{TryInto};
+
 use std::net::IpAddr;
-use std::str::FromStr;
+
 use rand::{RngCore, thread_rng};
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
-use serde::de::{Error, Visitor};
+
 use thiserror::Error;
 
 pub const KAD_ID_LEN: usize = 160;
@@ -31,7 +31,7 @@ impl KadId {
   pub fn parse_from_base64str(s: &str) -> Result<KadId, KadIdError> {
     let br = base64::decode(s);
     match br {
-      Err(e) => Err(KadIdError::InvalidByteArrayError),
+      Err(_e) => Err(KadIdError::InvalidByteArrayError),
       Ok(b) => {
         let ba = b.try_into();
         match ba {

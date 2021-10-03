@@ -236,7 +236,7 @@ mod tests {
       want: true,
       finally: Some(move |rt: &DefaultRoutingTable| {
         let index = rt.index(&node_cloned.id);
-        if let Some(e) = rt.table[index].first() {
+        if let Some(_e) = rt.table[index].first() {
           (true, "".to_owned())
         } else {
           (false, "".to_owned())
@@ -244,7 +244,7 @@ mod tests {
       }),
     }];
 
-    for mut tt in tests {
+    for tt in tests {
       let mut rt = DefaultRoutingTable {
         own_id: tt.fields.own_id,
         table: tt.fields.table,
