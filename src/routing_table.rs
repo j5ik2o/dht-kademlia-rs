@@ -135,6 +135,7 @@ fn xor_inner(kid1: &KadId, kid2: &KadId) -> KadId {
 
 #[cfg(test)]
 mod tests {
+  use std::net::SocketAddr;
   use super::*;
 
   fn init_logger() {
@@ -221,7 +222,7 @@ mod tests {
     node_id_v[19] = 0x01;
     let node_id = KadId::new(node_id_v);
 
-    let node = Node::new(node_id, None);
+    let node = Node::new(node_id, "127.0.0.1:3330".parse::<SocketAddr>().unwrap());
     let node_cloned = node.clone();
 
     let mut table = Vec::with_capacity(KAD_ID_LEN);

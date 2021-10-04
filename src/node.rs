@@ -1,6 +1,6 @@
 use std::convert::{TryInto};
 
-use std::net::IpAddr;
+use std::net::{IpAddr, SocketAddr};
 
 use rand::{RngCore, thread_rng};
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
@@ -105,18 +105,21 @@ impl From<String> for KadId {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Node {
   pub(crate) id: KadId,
-  pub(crate) meta: Option<NodeMeta>,
+  pub(crate) socket_addr: SocketAddr,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NodeMeta {
-  ip_addr: IpAddr,
-  port: u16,
+impl Default for Node {
+  fn default() -> Self {
+    Self {
+      id: KadId::default(),
+      socket_addr: SocketAddr::new("127.0.0.1".parse::<IpAddr>().unwrap(), 3330),
+    }
+  }
 }
 
 impl Node {
-  pub fn new(id: KadId, meta: Option<NodeMeta>) -> Self {
-    Self { id, meta }
+  pub fn new(id: KadId, socket_addr: SocketAddr) -> Self {
+    Self { id, socket_addr }
   }
 }
 
@@ -130,6 +133,7 @@ mod tests {
     // env::set_var("RUST_LOG", "trace");
     let _ = logger::try_init();
   }
+
   #[test]
   fn test_kid() {
     init_logger();
@@ -147,7 +151,7 @@ mod tests {
   fn test_node() {
     init_logger();
     let kid = KadId::generate();
-    let node1 = Node::new(kid, None);
+    let node1 = Node::new(kid, "127.0.0.1:3330".parse::<SocketAddr>().unwrap());
     let s = serde_json::to_string(&node1).unwrap();
     log::debug!("s = {}", s);
     let node2: Node = serde_json::from_str(&s).unwrap();

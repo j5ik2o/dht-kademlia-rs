@@ -32,15 +32,12 @@ pub struct Message {
 }
 
 impl Message {
-  pub fn new_with_socket_addr(socket_addr: SocketAddr, data: Vec<u8>) -> Self {
+  pub fn new_with_socket_addr_and_data(socket_addr: SocketAddr, data: Vec<u8>) -> Self {
     Self { socket_addr, data }
   }
 
-  pub fn new_with_ip_addr_and_port(ip_addr: IpAddr, port: u16, data: Vec<u8>) -> Self {
-    Self {
-      socket_addr: SocketAddr::new(ip_addr, port),
-      data,
-    }
+  pub fn new_with_ip_addr_and_port_and_data(ip_addr: IpAddr, port: u16, data: Vec<u8>) -> Self {
+    Self::new_with_socket_addr_and_data(SocketAddr::new(ip_addr, port), data)
   }
 }
 
@@ -88,7 +85,7 @@ impl UdpTransporter {
   }
 
   async fn send_message_to_tx(msg_tx: Sender<Message>, buf: Vec<u8>, addr: SocketAddr) {
-    let msg = Message::new_with_ip_addr_and_port(addr.ip(), addr.port(), buf);
+    let msg = Message::new_with_ip_addr_and_port_and_data(addr.ip(), addr.port(), buf);
     let _ = msg_tx.send(msg).await;
   }
 }
@@ -195,7 +192,8 @@ mod tests {
     let mut client_cloned = client.clone();
     tokio::spawn(async move {
       let msg_data = "abc";
-      let msg = Message::new_with_ip_addr_and_port(LOCAL_IP, SERVER_PORT, Vec::from(msg_data));
+      let msg =
+        Message::new_with_ip_addr_and_port_and_data(LOCAL_IP, SERVER_PORT, Vec::from(msg_data));
       client_cloned.send(msg.clone()).await;
       client_cloned.send(msg.clone()).await;
       client_cloned.send(msg.clone()).await;

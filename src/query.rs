@@ -1,15 +1,28 @@
 use serde::{Deserialize, Serialize};
+use ulid_generator_rs::ULID;
 use crate::node::{KadId, Node};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct KademliaMessage {
-  origin: Node,
-  query_sn: i64,
-  type_id: i32,
-  query: Query,
+  pub origin: Node,
+  pub query_sn: ULID,
+  pub code: QueryCode,
+  pub query: Query,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
+pub enum QueryCode {
+  PingQuery,
+  StoreQuery,
+  FindNodeQuery,
+  FindValueQuery,
+  PingReply,
+  StoreReply,
+  FindNodeReply,
+  FindValueReply,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub enum Query {
   PingQuery {
     target: KadId,
@@ -31,12 +44,12 @@ pub enum Query {
     success: bool,
   },
   FindNodeReply {
-    key: String,
-    value: Vec<u8>,
     closest: Vec<Node>,
   },
   FindValueReply {
     key: String,
+    value: Vec<u8>,
+    closest: Vec<Node>,
   },
 }
 
@@ -52,7 +65,31 @@ impl Query {
 
 #[cfg(test)]
 mod tests {
+  use ulid_generator_rs::ULIDGenerator;
+  use crate::node::{KadId, Node};
+  use crate::query::{KademliaMessage, Query, QueryCode};
+
+  fn init_logger() {
+    use std::env;
+    env::set_var("RUST_LOG", "debug");
+    // env::set_var("RUST_LOG", "trace");
+    let _ = logger::try_init();
+  }
 
   #[test]
-  fn test() {}
+  fn test() {
+    init_logger();
+    let mut gen = ULIDGenerator::new();
+    let id = gen.generate().unwrap();
+    let msg = KademliaMessage {
+      origin: Node::default(),
+      query_sn: id,
+      code: QueryCode::FindNodeQuery,
+      query: Query::FindNodeQuery {
+        target: KadId::default(),
+      },
+    };
+    let s = serde_json::to_string(&msg).unwrap();
+    log::debug!("s = {}", s);
+  }
 }
