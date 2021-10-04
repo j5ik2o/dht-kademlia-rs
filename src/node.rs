@@ -28,6 +28,7 @@ impl KadId {
     rng.fill_bytes(&mut values);
     KadId::new(values)
   }
+
   pub fn parse_from_base64str(s: &str) -> Result<KadId, KadIdError> {
     let br = base64::decode(s);
     match br {
@@ -41,21 +42,27 @@ impl KadId {
       }
     }
   }
+
   pub fn new(v: ByteArray) -> Self {
     Self(v)
   }
+
   pub fn update_part(&mut self, pos: usize, v: u8) {
     self.0[pos] = v;
   }
+
   pub fn get(&self) -> &[u8] {
     &self.0
   }
+
   pub fn get_mut(&mut self) -> &mut [u8] {
     &mut self.0
   }
+
   pub fn part(&self, pos: usize) -> u8 {
     self.0[pos]
   }
+
   pub fn to_base64(&self) -> String {
     base64::encode(self.0)
   }

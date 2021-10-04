@@ -40,6 +40,16 @@ pub enum Query {
   },
 }
 
+impl Query {
+  pub fn serialize(msg: &KademliaMessage) -> serde_json::Result<String> {
+    serde_json::to_string(msg)
+  }
+
+  pub fn deserialize(msg: &str) -> serde_json::Result<KademliaMessage> {
+    serde_json::from_str(msg)
+  }
+}
+
 #[cfg(test)]
 mod tests {
 

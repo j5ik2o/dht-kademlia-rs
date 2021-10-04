@@ -27,31 +27,40 @@ pub struct UdpTransporter {
 
 #[derive(Debug, Clone)]
 pub struct Message {
-  ip_addr: IpAddr,
-  port: u16,
+  socket_addr: SocketAddr,
   data: Vec<u8>,
 }
 
 impl Message {
-  pub fn new(ip_addr: IpAddr, port: u16, data: Vec<u8>) -> Self {
+  pub fn new_with_socket_addr(socket_addr: SocketAddr, data: Vec<u8>) -> Self {
     Self {
-      ip_addr,
-      port,
+      socket_addr,
+      data,
+    }
+  }
+
+  pub fn new_with_ip_addr_and_port(ip_addr: IpAddr, port: u16, data: Vec<u8>) -> Self {
+    Self {
+      socket_addr: SocketAddr::new(ip_addr, port),
       data,
     }
   }
 }
 
 impl UdpTransporter {
-  pub fn new(ip_addr: IpAddr, port: u16) -> UdpTransporter {
+  pub fn new_with_socket_addr(socket_addr: SocketAddr) -> UdpTransporter {
     let (tx, rx) = channel(128);
     Self {
       tx,
       rx: Arc::new(Mutex::new(rx)),
       terminate: Arc::new(AtomicBool::new(false)),
-      socket_addr: Arc::new(SocketAddr::new(ip_addr, port)),
+      socket_addr: Arc::new(socket_addr),
       socket: None,
     }
+  }
+
+  pub fn new_with_ip_addr_and_port(ip_addr: IpAddr, port: u16) -> UdpTransporter {
+    Self::new_with_socket_addr(SocketAddr::new(ip_addr, port))
   }
 
   async fn send_message_to_upstream(&self) {
@@ -62,12 +71,11 @@ impl UdpTransporter {
       let mut rx = self.rx.lock().await;
       if let Some(msg) = rx.recv().await {
         // log::debug!("send_to = {:?}", msg);
-        let addr = SocketAddr::new(msg.ip_addr, msg.port);
         let _ = self
           .socket
           .as_ref()
           .unwrap()
-          .send_to(&msg.data, addr)
+          .send_to(&msg.data, (&*self.socket_addr).clone())
           .await
           .unwrap();
       }
@@ -83,7 +91,7 @@ impl UdpTransporter {
   }
 
   async fn send_message_to_tx(msg_tx: Sender<Message>, buf: Vec<u8>, addr: SocketAddr) {
-    let msg = Message::new(addr.ip(), addr.port(), buf);
+    let msg = Message::new_with_ip_addr_and_port(addr.ip(), addr.port(), buf);
     let _ = msg_tx.send(msg).await;
   }
 }
@@ -142,7 +150,7 @@ mod tests {
   }
 
   fn create_transporter(ip_addr: IpAddr, port: u16) -> impl Transporter + Clone {
-    UdpTransporter::new(ip_addr, port)
+    UdpTransporter::new_with_ip_addr_and_port(ip_addr, port)
   }
 
   #[tokio::test]
@@ -190,7 +198,7 @@ mod tests {
     let mut client_cloned = client.clone();
     tokio::spawn(async move {
       let msg_data = "abc";
-      let msg = Message::new(LOCAL_IP, SERVER_PORT, Vec::from(msg_data));
+      let msg = Message::new_with_ip_addr_and_port(LOCAL_IP, SERVER_PORT, Vec::from(msg_data));
       client_cloned.send(msg.clone()).await;
       client_cloned.send(msg.clone()).await;
       client_cloned.send(msg.clone()).await;
