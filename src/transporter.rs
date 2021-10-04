@@ -33,10 +33,7 @@ pub struct Message {
 
 impl Message {
   pub fn new_with_socket_addr(socket_addr: SocketAddr, data: Vec<u8>) -> Self {
-    Self {
-      socket_addr,
-      data,
-    }
+    Self { socket_addr, data }
   }
 
   pub fn new_with_ip_addr_and_port(ip_addr: IpAddr, port: u16, data: Vec<u8>) -> Self {

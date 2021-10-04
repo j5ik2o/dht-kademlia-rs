@@ -3,11 +3,11 @@
 extern crate env_logger as logger;
 extern crate base64;
 
-use std::net::{IpAddr, SocketAddr};
+use std::net::{SocketAddr};
 use std::sync::Arc;
-use crate::datastore::DataStore;
-use crate::node::{KadId, Node};
-use crate::routing_table::RoutingTable;
+
+use crate::node::{Node};
+
 use crate::transporter::{Message, Transporter, UdpTransporter};
 use anyhow::Result;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
@@ -32,18 +32,18 @@ pub struct Kademlia {
 }
 
 impl Kademlia {
-
   pub fn new(own: Node, socket_addr: SocketAddr) -> Self {
     let (msg_tx, msg_rx) = channel(128);
     Self {
       own,
       socket_addr,
-      transporter: Arc::new(Mutex::new(UdpTransporter::new_with_socket_addr(socket_addr))),
+      transporter: Arc::new(Mutex::new(UdpTransporter::new_with_socket_addr(
+        socket_addr,
+      ))),
       msg_tx,
       msg_rx,
     }
   }
-
 
   pub async fn bootstrap(&mut self) -> Result<()> {
     let mut lock = self.transporter.lock().await;
@@ -52,9 +52,7 @@ impl Kademlia {
     Ok(())
   }
 
-  pub async fn main_routine(&mut self) {
-
-  }
+  pub async fn main_routine(&mut self) {}
 
   pub async fn send_kad_msg(&self, socket_addr: SocketAddr, target: KademliaMessage) -> Result<()> {
     let data = serde_json::to_vec(&target).unwrap();
@@ -63,5 +61,4 @@ impl Kademlia {
     lock.send(msg).await;
     Ok(())
   }
-
 }
