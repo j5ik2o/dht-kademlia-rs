@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
 
 #[async_trait]
-pub trait Transporter {
+pub trait Transporter: Send + Sync + 'static {
   async fn bind(&mut self);
   async fn stop(&mut self);
   async fn send(&mut self, msg: Message);
@@ -27,8 +27,8 @@ pub struct UdpTransporter {
 
 #[derive(Debug, Clone)]
 pub struct Message {
-  socket_addr: SocketAddr,
-  data: Vec<u8>,
+  pub(crate) socket_addr: SocketAddr,
+  pub(crate) data: Vec<u8>,
 }
 
 impl Message {
@@ -79,8 +79,8 @@ impl UdpTransporter {
   async fn receive_message_from_downstream(&mut self, msg_tx: Sender<Message>) {
     let mut buf = [0; 1500];
     let result = self.socket.as_ref().unwrap().try_recv_from(&mut buf);
-    if let Ok((_, addr)) = result {
-      Self::send_message_to_tx(msg_tx, Vec::from(buf), addr).await;
+    if let Ok((size, addr)) = result {
+      Self::send_message_to_tx(msg_tx, Vec::from(&buf[0..size]), addr).await;
     }
   }
 

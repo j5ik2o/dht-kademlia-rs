@@ -14,6 +14,14 @@ pub struct InMemoryDataStore {
   store: HashMap<String, Vec<u8>>,
 }
 
+impl InMemoryDataStore {
+  pub fn new() -> Self {
+    Self {
+      store: HashMap::new(),
+    }
+  }
+}
+
 impl DataStore for InMemoryDataStore {
   fn get(&self, key: &str) -> Result<&[u8]> {
     self.store.get(key).map(|e| e.as_ref()).ok_or(anyhow!(""))

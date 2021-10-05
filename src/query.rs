@@ -35,7 +35,7 @@ pub enum Query {
     target: KadId,
   },
   FindValueQuery {
-    target: KadId,
+    key: String,
   },
   PingReply {
     target: KadId,
@@ -48,6 +48,7 @@ pub enum Query {
   },
   FindValueReply {
     key: String,
+    has_value: bool,
     value: Vec<u8>,
     closest: Vec<Node>,
   },
@@ -89,7 +90,8 @@ mod tests {
         target: KadId::default(),
       },
     };
-    let s = serde_json::to_string(&msg).unwrap();
-    log::debug!("s = {}", s);
+    let s = serde_json::to_vec(&msg).unwrap();
+    let d: KademliaMessage = serde_json::from_slice(&s).unwrap();
+    log::debug!("s = {:?}",d);
   }
 }

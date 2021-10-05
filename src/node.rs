@@ -1,9 +1,12 @@
-use std::convert::{TryInto};
+use std::convert::{Infallible, TryFrom, TryInto};
+use std::fmt::Formatter;
 
 use std::net::{IpAddr, SocketAddr};
 
 use rand::{RngCore, thread_rng};
 use serde::{Serialize, Deserialize, Serializer, Deserializer};
+use sha1::Digest;
+use sha1::digest::Update;
 
 use thiserror::Error;
 
@@ -12,7 +15,7 @@ pub const KAD_ID_LEN_BYTES: usize = KAD_ID_LEN / 8;
 
 pub type ByteArray = [u8; KAD_ID_LEN_BYTES];
 
-#[derive(Debug, Clone, PartialOrd, PartialEq)]
+#[derive(Clone, PartialOrd, PartialEq)]
 pub struct KadId(ByteArray);
 
 #[derive(Debug, Error, Clone, PartialEq)]
@@ -21,12 +24,58 @@ pub enum KadIdError {
   InvalidByteArrayError,
 }
 
+impl std::fmt::Debug for KadId {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}", self.to_hex())
+  }
+}
+
+impl std::fmt::Display for KadId {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    write!(f, "{}", self.to_hex())
+  }
+}
+
+impl TryFrom<String> for KadId {
+  type Error = KadIdError;
+
+  fn try_from(value: String) -> Result<Self, Self::Error> {
+    use sha1::Sha1;
+    let mut hasher = Sha1::new();
+    Update::update(&mut hasher, value.as_bytes());
+    let hashed_value_output = hasher.finalize();
+    let mut value = [0u8; KAD_ID_LEN_BYTES];
+    let hashed_value_result = hashed_value_output[..].try_into();
+    match hashed_value_result {
+      Ok(hashed_value) => {
+        std::mem::replace(&mut value, hashed_value);
+        Ok(KadId::new(value))
+      }
+      Err(e) => Err(KadIdError::InvalidByteArrayError),
+    }
+  }
+}
+
 impl KadId {
   pub fn generate() -> KadId {
     let mut rng = thread_rng();
     let mut values = [0u8; KAD_ID_LEN_BYTES];
     rng.fill_bytes(&mut values);
     KadId::new(values)
+  }
+
+  pub fn parse_from_hexstr(s: &str) -> Result<KadId, KadIdError> {
+    let br = hex::decode(s);
+    match br {
+      Err(_e) => Err(KadIdError::InvalidByteArrayError),
+      Ok(b) => {
+        let ba = b.try_into();
+        match ba {
+          Ok(b) => Ok(KadId::new(b)),
+          Err(_) => Err(KadIdError::InvalidByteArrayError),
+        }
+      }
+    }
   }
 
   pub fn parse_from_base64str(s: &str) -> Result<KadId, KadIdError> {
@@ -66,6 +115,10 @@ impl KadId {
   pub fn to_base64(&self) -> String {
     base64::encode(self.0)
   }
+
+  pub fn to_hex(&self) -> String {
+    hex::encode(self.0)
+  }
 }
 
 impl Serialize for KadId {
@@ -73,7 +126,7 @@ impl Serialize for KadId {
   where
     S: Serializer,
   {
-    serializer.serialize_str(&self.to_base64())
+    serializer.serialize_str(&self.to_hex())
   }
 }
 
@@ -83,7 +136,7 @@ impl<'de> Deserialize<'de> for KadId {
     D: Deserializer<'de>,
   {
     let deserialized_str = String::deserialize(deserializer)?;
-    let s = KadId::parse_from_base64str(&deserialized_str).map_err(serde::de::Error::custom);
+    let s = KadId::parse_from_hexstr(&deserialized_str).map_err(serde::de::Error::custom);
     log::debug!("de:s = {:?}", s);
     s
   }
@@ -92,13 +145,6 @@ impl<'de> Deserialize<'de> for KadId {
 impl Default for KadId {
   fn default() -> Self {
     Self([0; KAD_ID_LEN_BYTES])
-  }
-}
-
-impl From<String> for KadId {
-  fn from(v: String) -> Self {
-    let s = base64::decode(v).unwrap().try_into().unwrap();
-    Self::new(s)
   }
 }
 

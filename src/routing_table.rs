@@ -61,7 +61,9 @@ impl RoutingTable for DefaultRoutingTable {
   }
 
   fn closer(&mut self, kid: &KadId) -> Vec<Node> {
+    log::debug!("kid = {}", kid);
     let closest_index = self.index(kid);
+    log::debug!("closest_index = {}", closest_index);
     let mut nodes = self.table[closest_index].clone();
     for i in 1..KAD_ID_LEN {
       let upper = closest_index + i;
@@ -102,6 +104,7 @@ impl RoutingTable for DefaultRoutingTable {
 
   fn index(&self, kid: &KadId) -> usize {
     let distance = self.xor(kid);
+    log::debug!("distance = {}", distance);
     let mut first_bit_index = 0;
     for v in distance.get() {
       if *v == 0 {
@@ -125,11 +128,13 @@ impl RoutingTable for DefaultRoutingTable {
 }
 
 fn xor_inner(kid1: &KadId, kid2: &KadId) -> KadId {
+  log::debug!("kid1 = {}, kid2 = {}", kid1, kid2);
   let mut xor = KadId::default();
   for i in 0..KAD_ID_LEN_BYTES {
     let v = kid1.part(i) ^ kid2.part(i);
     xor.update_part(i, v);
   }
+  log::debug!("xor = {}", xor);
   xor
 }
 
