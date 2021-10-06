@@ -43,14 +43,12 @@ impl RoutingTable for DefaultRoutingTable {
   }
 
   fn add(&mut self, node: Node) -> bool {
-
     let index = self.index(&node.id);
     let is_less_than_bucket_size = {
       let mut table = self.table.lock().unwrap();
       table[index].len() <= BUCKET_SIZE
     };
-    if node.id != self.own_id && self.find(&node.id).is_none() && is_less_than_bucket_size
-    {
+    if node.id != self.own_id && self.find(&node.id).is_none() && is_less_than_bucket_size {
       let mut table = self.table.lock().unwrap();
       table[index].push(node);
       true

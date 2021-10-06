@@ -32,7 +32,7 @@ pub mod utils;
 #[derive(Clone)]
 pub struct Kademlia {
   own: Node,
-  socket_addr: SocketAddr,
+  //  socket_addr: SocketAddr,
   transporter: UdpTransporter,
   msg_tx: Sender<Message>,
   msg_rx: Arc<Mutex<Receiver<Message>>>,
@@ -47,11 +47,13 @@ unsafe impl Send for Kademlia {}
 impl Kademlia {
   pub fn new(own: Node, data_store: InMemoryDataStore, routing_table: DefaultRoutingTable) -> Self {
     let (msg_tx, msg_rx) = channel(128);
-    let tx =
-      UdpTransporter::new_with_ip_addr_and_port(own.socket_addr.ip().clone(), own.socket_addr.port());
+    let tx = UdpTransporter::new_with_ip_addr_and_port(
+      own.socket_addr.ip().clone(),
+      own.socket_addr.port(),
+    );
     Self {
       own: own.clone(),
-      socket_addr: own.socket_addr.clone(),
+      // socket_addr: own.socket_addr.clone(),
       transporter: tx,
       msg_tx,
       msg_rx: Arc::new(Mutex::new(msg_rx)),
@@ -92,13 +94,15 @@ impl Kademlia {
     }
   }
 
-  pub async fn bootstrap(&mut self, entry_node_addr: &str, entry_node_port: u16) -> Result<()> {
-    use resolve::resolve_host;
-    let entry_node_ip_addr: IpAddr = resolve_host(entry_node_addr)
-      .unwrap()
-      .into_iter()
-      .next()
-      .unwrap();
+  pub async fn bootstrap(&mut self, seed_node_socket_addr_opt: Option<SocketAddr>) -> Result<()> {
+    // if let Some(seed_node_socket_addr) = seed_node_socket_addr_opt {
+    //   use resolve::resolve_host;
+    //   let entry_node_ip_addr: IpAddr = resolve_host(seed_node_addr)
+    //     .unwrap()
+    //     .into_iter()
+    //     .next()
+    //     .unwrap();
+    // }
 
     let jh1 = {
       let mut transporter_cloned = self.transporter.clone();
@@ -114,24 +118,21 @@ impl Kademlia {
 
     let mut self_cloned = self.clone();
     let jh2 = tokio::spawn(async move {
-      self_cloned
-        .main_routine(entry_node_ip_addr, entry_node_port)
-        .await;
+      self_cloned.main_routine(seed_node_socket_addr_opt).await;
     });
     tokio::join!(jh1, jh2);
     Ok(())
   }
 
-  pub async fn main_routine(&mut self, entry_node_ip_addr: IpAddr, entry_node_port: u16) {
-    log::debug!("send_find_node_query");
-    self
-      .send_find_node_query(
-        SocketAddr::new(entry_node_ip_addr, entry_node_port),
-        self.own.id.clone(),
-      )
-      .await
-      .unwrap();
-    log::debug!("done:send_find_node_query");
+  pub async fn main_routine(&mut self, seed_node_socket_addr_opt: Option<SocketAddr>) {
+    if let Some(seed_node_socket_addr) = seed_node_socket_addr_opt {
+      log::debug!("send_find_node_query");
+      self
+        .send_find_node_query(seed_node_socket_addr, self.own.id.clone())
+        .await
+        .unwrap();
+      log::debug!("done:send_find_node_query");
+    }
     loop {
       let msg = {
         let mut msg_rx = self.msg_rx.lock().await;
@@ -140,6 +141,23 @@ impl Kademlia {
       let s = String::from_utf8(msg.data.clone());
       let km: KademliaMessage = serde_json::from_slice(&msg.data).unwrap();
       match km.query {
+        Query::PingQuery { target } => {
+          log::debug!(
+            "Query::PingQuery:target = {:?}, self = {:?}",
+            target,
+            self.own.id
+          );
+          log::debug!("Query::send_ping_reply");
+          self
+            .send_ping_reply(msg.socket_addr, km.query_sn, self.own.id.clone())
+            .await
+            .unwrap();
+          log::debug!("done:Query::send_ping_reply");
+          if !self.routing_table.find(&target).is_some() {
+            self.routing_table.add(km.origin);
+          }
+          log::debug!("done:Query::PingQuery:target = {:?}", target);
+        }
         Query::FindNodeQuery { target } => {
           log::debug!("Query::FindNodeQuery:target = {:?}", target);
           let closest = self.routing_table.closer(&target);
@@ -156,7 +174,9 @@ impl Kademlia {
           self.routing_table.add(km.origin);
           log::debug!("done:self.routing_table.add(km.origin)");
           for node in closest.iter() {
-            log::debug!("if self.is_not_same_host(node) && self.routing_table.find(&node.id).is_none()");
+            log::debug!(
+              "if self.is_not_same_host(node) && self.routing_table.find(&node.id).is_none()"
+            );
             if self.is_not_same_host(node) && self.routing_table.find(&node.id).is_none() {
               log::debug!("send_find_node_query");
               self
@@ -212,7 +232,9 @@ impl Kademlia {
             }
           }
         }
-        _ => {}
+        msg => {
+          log::debug!("otherwise: msg = {:?}", msg)
+        }
       }
     }
   }
@@ -318,6 +340,31 @@ impl Kademlia {
     };
     self.send_kad_msg(socket_addr, msg).await
   }
+
+  pub async fn send_ping_query(&mut self, socket_addr: SocketAddr, target: KadId) -> Result<()> {
+    let msg = KademliaMessage {
+      origin: self.own.clone(),
+      query_sn: self.gen_ulid().await.unwrap(),
+      code: QueryCode::PingQuery,
+      query: Query::PingQuery { target },
+    };
+    self.send_kad_msg(socket_addr, msg).await
+  }
+
+  pub async fn send_ping_reply(
+    &mut self,
+    socket_addr: SocketAddr,
+    query_sn: ULID,
+    target: KadId,
+  ) -> Result<()> {
+    let msg = KademliaMessage {
+      origin: self.own.clone(),
+      query_sn,
+      code: QueryCode::PingReply,
+      query: Query::PingReply { target },
+    };
+    self.send_kad_msg(socket_addr, msg).await
+  }
 }
 
 #[cfg(test)]
@@ -342,16 +389,17 @@ mod tests {
     init_logger();
 
     let addr = resolve::resolve_host("127.0.0.1").unwrap().next().unwrap();
-    let socket_addr1 = SocketAddr::new(addr, 7005);
-    let socket_addr2 = SocketAddr::new(addr, 7006);
+    let listen_socket_addr1 = SocketAddr::new(addr, 7005);
+    let listen_socket_addr2 = SocketAddr::new(addr, 7006);
+    let seed_node_socket_addr = "127.0.0.1:7005".parse::<SocketAddr>().unwrap();
 
     let mut own_id_v1 = [0x00; KAD_ID_LEN_BYTES];
     own_id_v1[0] = 0x01;
-    let node1 = Node::new(KadId::new(own_id_v1), socket_addr1);
+    let node1 = Node::new(KadId::new(own_id_v1), listen_socket_addr1);
 
     let mut own_id_v2 = [0x00; KAD_ID_LEN_BYTES];
     own_id_v2[0] = 0x02;
-    let node2 = Node::new(KadId::new(own_id_v2), socket_addr2);
+    let node2 = Node::new(KadId::new(own_id_v2), listen_socket_addr2);
 
     println!("node1 = {:?}", node1);
     println!("node2 = {:?}", node2);
@@ -363,7 +411,7 @@ mod tests {
     );
     let mut kad1_cloned = kad1.clone();
     let jh1 = tokio::spawn(async move {
-      kad1_cloned.bootstrap("127.0.0.1", 9999).await;
+      kad1_cloned.bootstrap(None).await;
     });
 
     let mut kad2 = Kademlia::new(
@@ -373,8 +421,15 @@ mod tests {
     );
     let mut kad2_cloned = kad2.clone();
     let jh2 = tokio::spawn(async move {
-      kad2_cloned.bootstrap("127.0.0.1", 7005).await;
+      kad2_cloned.bootstrap(Some(seed_node_socket_addr)).await;
     });
+
+    tokio::time::sleep(Duration::from_secs(5)).await;
+
+    kad2
+      .send_ping_query(seed_node_socket_addr, kad2.own.id.clone())
+      .await
+      .unwrap();
 
     tokio::time::sleep(Duration::from_secs(5)).await;
 
