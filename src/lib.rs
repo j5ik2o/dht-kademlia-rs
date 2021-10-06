@@ -33,7 +33,7 @@ pub mod utils;
 pub struct Kademlia {
   own: Node,
   socket_addr: SocketAddr,
-  transporter: Option<UdpTransporter>,
+  transporter: UdpTransporter,
   msg_tx: Sender<Message>,
   msg_rx: Arc<Mutex<Receiver<Message>>>,
   routing_table: DefaultRoutingTable,
@@ -47,10 +47,12 @@ unsafe impl Send for Kademlia {}
 impl Kademlia {
   pub fn new(own: Node, data_store: InMemoryDataStore, routing_table: DefaultRoutingTable) -> Self {
     let (msg_tx, msg_rx) = channel(128);
+    let tx =
+      UdpTransporter::new_with_ip_addr_and_port(own.socket_addr.ip().clone(), own.socket_addr.port());
     Self {
       own: own.clone(),
       socket_addr: own.socket_addr.clone(),
-      transporter: None,
+      transporter: tx,
       msg_tx,
       msg_rx: Arc::new(Mutex::new(msg_rx)),
       data_store,
@@ -60,8 +62,7 @@ impl Kademlia {
   }
 
   pub async fn leave(&mut self) {
-    let lock = self.transporter.as_mut().unwrap();
-    lock.stop().await;
+    self.transporter.stop().await;
   }
 
   pub async fn store(&mut self, key: &str, value: &[u8]) {
@@ -100,10 +101,7 @@ impl Kademlia {
       .unwrap();
 
     let jh1 = {
-      let tx =
-        UdpTransporter::new_with_ip_addr_and_port(self.socket_addr.ip(), self.socket_addr.port());
-      self.transporter = Some(tx);
-      let mut transporter_cloned = self.transporter.clone().unwrap();
+      let mut transporter_cloned = self.transporter.clone();
       let msg_tx_cloned = self.msg_tx.clone();
       tokio::spawn(async move {
         //        let mut lock = transporter_cloned.lock().await;
@@ -125,6 +123,7 @@ impl Kademlia {
   }
 
   pub async fn main_routine(&mut self, entry_node_ip_addr: IpAddr, entry_node_port: u16) {
+    log::debug!("send_find_node_query");
     self
       .send_find_node_query(
         SocketAddr::new(entry_node_ip_addr, entry_node_port),
@@ -132,7 +131,7 @@ impl Kademlia {
       )
       .await
       .unwrap();
-    log::debug!("send_find_node_query");
+    log::debug!("done:send_find_node_query");
     loop {
       let msg = {
         let mut msg_rx = self.msg_rx.lock().await;
@@ -149,18 +148,25 @@ impl Kademlia {
             .await
             .unwrap();
           self.routing_table.add(km.origin);
+          log::debug!("done:Query::FindNodeQuery: rt = {:?}", self.routing_table);
         }
         Query::FindNodeReply { closest } => {
           log::debug!("Query::FindNodeReply:closest = {:?}", closest);
+          log::debug!("self.routing_table.add(km.origin)");
           self.routing_table.add(km.origin);
+          log::debug!("done:self.routing_table.add(km.origin)");
           for node in closest.iter() {
-            if self.is_not_same_host(node) && { self.routing_table.find(&node.id).is_none() } {
+            log::debug!("if self.is_not_same_host(node) && self.routing_table.find(&node.id).is_none()");
+            if self.is_not_same_host(node) && self.routing_table.find(&node.id).is_none() {
+              log::debug!("send_find_node_query");
               self
                 .send_find_node_query(node.socket_addr, self.own.id.clone())
                 .await
                 .unwrap();
+              log::debug!("done:send_find_node_query");
             }
           }
+          log::debug!("done:Query::FindNodeReply: rt = {:?}", self.routing_table);
         }
         Query::StoreQuery { key, data } => {
           log::debug!("Query::StoreQuery:key = {:?}, data = {:?}", key, data);
@@ -227,7 +233,7 @@ impl Kademlia {
   ) -> Result<()> {
     let data = serde_json::to_vec(&target).unwrap();
     let msg = Message::new_with_socket_addr_and_data(socket_addr, data);
-    self.transporter.as_mut().unwrap().send(msg).await;
+    self.transporter.send(msg).await;
     Ok(())
   }
 
@@ -360,8 +366,6 @@ mod tests {
       kad1_cloned.bootstrap("127.0.0.1", 9999).await;
     });
 
-    tokio::time::sleep(Duration::from_secs(1));
-
     let mut kad2 = Kademlia::new(
       node2.clone(),
       InMemoryDataStore::new(),
@@ -371,10 +375,8 @@ mod tests {
     let jh2 = tokio::spawn(async move {
       kad2_cloned.bootstrap("127.0.0.1", 7005).await;
     });
-    tokio::time::sleep(Duration::from_secs(1));
 
-    jh1.await;
-    jh2.await;
+    tokio::time::sleep(Duration::from_secs(5)).await;
 
     kad1.leave().await;
     kad2.leave().await;

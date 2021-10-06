@@ -43,10 +43,15 @@ impl RoutingTable for DefaultRoutingTable {
   }
 
   fn add(&mut self, node: Node) -> bool {
+
     let index = self.index(&node.id);
-    let mut table = self.table.lock().unwrap();
-    if node.id != self.own_id && self.find(&node.id).is_none() && table[index].len() <= BUCKET_SIZE
+    let is_less_than_bucket_size = {
+      let mut table = self.table.lock().unwrap();
+      table[index].len() <= BUCKET_SIZE
+    };
+    if node.id != self.own_id && self.find(&node.id).is_none() && is_less_than_bucket_size
     {
+      let mut table = self.table.lock().unwrap();
       table[index].push(node);
       true
     } else {
@@ -56,9 +61,12 @@ impl RoutingTable for DefaultRoutingTable {
 
   fn del(&mut self, kid: &KadId) {
     let index = self.index(kid);
-    let mut table = self.table.lock().unwrap();
-    let position_opt = table[index].iter().position(|e| e.id == *kid);
+    let position_opt = {
+      let mut table = self.table.lock().unwrap();
+      table[index].iter().position(|e| e.id == *kid)
+    };
     if let Some(position) = position_opt {
+      let mut table = self.table.lock().unwrap();
       table[index].remove(position);
     }
   }
@@ -71,18 +79,22 @@ impl RoutingTable for DefaultRoutingTable {
 
   fn closer(&mut self, kid: &KadId) -> Vec<Node> {
     let closest_index = self.index(kid);
-    let mut table = self.table.lock().unwrap();
-    let mut nodes = table[closest_index].clone();
+    let mut nodes = {
+      let mut table = self.table.lock().unwrap();
+      table[closest_index].clone()
+    };
     for i in 1..KAD_ID_LEN {
       let upper = closest_index as i32 + i as i32;
       let lower = closest_index as i32 - i as i32;
       // log::debug!("upper = {}, lower = {}", upper, lower);
       let mut tmp = Vec::<Node>::new();
       if upper < KAD_ID_LEN as i32 {
+        let mut table = self.table.lock().unwrap();
         let iter = table[upper as usize].clone();
         tmp.extend(iter);
       }
       if lower >= 0 {
+        let mut table = self.table.lock().unwrap();
         tmp.extend(table[lower as usize].clone());
       }
       tmp.sort_by(|ia, jb| {
@@ -109,7 +121,6 @@ impl RoutingTable for DefaultRoutingTable {
         return result;
       }
     }
-    log::debug!("nodes = {:?}", nodes);
     nodes
   }
 
@@ -138,13 +149,11 @@ impl RoutingTable for DefaultRoutingTable {
 }
 
 fn xor_inner(kid1: &KadId, kid2: &KadId) -> KadId {
-  log::debug!("kid1 = {}, kid2 = {}", kid1, kid2);
   let mut xor = KadId::default();
   for i in 0..KAD_ID_LEN_BYTES {
     let v = kid1.part(i) ^ kid2.part(i);
     xor.update_part(i, v);
   }
-  log::debug!("xor = {}", xor);
   xor
 }
 
