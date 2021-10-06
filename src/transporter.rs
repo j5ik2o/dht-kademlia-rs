@@ -25,6 +25,9 @@ pub struct UdpTransporter {
   socket: Option<Arc<UdpSocket>>,
 }
 
+unsafe impl Send for UdpTransporter {}
+unsafe impl Sync for UdpTransporter {}
+
 #[derive(Debug, Clone)]
 pub struct Message {
   pub(crate) socket_addr: SocketAddr,
@@ -64,12 +67,12 @@ impl UdpTransporter {
       }
       let mut rx = self.rx.lock().await;
       if let Some(msg) = rx.recv().await {
-        // log::debug!("send_to = {:?}", msg);
+        log::debug!("own = {:?}, send_to = {:?}", (&*self.socket_addr), msg);
         let _ = self
           .socket
           .as_ref()
           .unwrap()
-          .send_to(&msg.data, (&*self.socket_addr).clone())
+          .send_to(&msg.data, msg.socket_addr)
           .await
           .unwrap();
       }
@@ -107,6 +110,7 @@ impl Transporter for UdpTransporter {
   }
 
   async fn run(&mut self, msg_tx: Sender<Message>) {
+    log::debug!("run:start");
     let self_cloned = self.clone();
     tokio::spawn(async move {
       self_cloned.send_message_to_upstream().await;

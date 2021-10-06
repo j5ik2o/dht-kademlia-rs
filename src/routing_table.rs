@@ -1,10 +1,16 @@
 use std::cmp::Ordering;
+use std::fmt::Debug;
+use std::sync::{Arc, Mutex};
 use crate::node::{KAD_ID_LEN, KAD_ID_LEN_BYTES, KadId, Node};
 
+#[derive(Debug, Clone)]
 pub struct DefaultRoutingTable {
   own_id: KadId,
-  table: Vec<Vec<Node>>,
+  table: Arc<Mutex<Vec<Vec<Node>>>>,
 }
+
+unsafe impl Send for DefaultRoutingTable {}
+unsafe impl Sync for DefaultRoutingTable {}
 
 impl DefaultRoutingTable {
   pub fn new(own_id: KadId) -> Self {
@@ -12,15 +18,18 @@ impl DefaultRoutingTable {
     for _ in 0..KAD_ID_LEN {
       table.push(Vec::new());
     }
-    Self { own_id, table }
+    Self {
+      own_id,
+      table: Arc::new(Mutex::new(table)),
+    }
   }
 }
 
-pub trait RoutingTable {
+pub trait RoutingTable: Debug {
   fn own_id(&self) -> &KadId;
   fn add(&mut self, node: Node) -> bool;
   fn del(&mut self, kid: &KadId);
-  fn find(&self, kid: &KadId) -> Option<&Node>;
+  fn find(&self, kid: &KadId) -> Option<Node>;
   fn closer(&mut self, kid: &KadId) -> Vec<Node>;
   fn index(&self, kid: &KadId) -> usize;
   fn xor(&self, kid: &KadId) -> KadId;
@@ -35,11 +44,10 @@ impl RoutingTable for DefaultRoutingTable {
 
   fn add(&mut self, node: Node) -> bool {
     let index = self.index(&node.id);
-    if node.id != self.own_id
-      && self.find(&node.id).is_none()
-      && self.table[index].len() <= BUCKET_SIZE
+    let mut table = self.table.lock().unwrap();
+    if node.id != self.own_id && self.find(&node.id).is_none() && table[index].len() <= BUCKET_SIZE
     {
-      self.table[index].push(node);
+      table[index].push(node);
       true
     } else {
       false
@@ -48,33 +56,34 @@ impl RoutingTable for DefaultRoutingTable {
 
   fn del(&mut self, kid: &KadId) {
     let index = self.index(kid);
-    let position_opt = self.table[index].iter().position(|e| e.id == *kid);
+    let mut table = self.table.lock().unwrap();
+    let position_opt = table[index].iter().position(|e| e.id == *kid);
     if let Some(position) = position_opt {
-      self.table[index].remove(position);
+      table[index].remove(position);
     }
   }
 
-  fn find(&self, kid: &KadId) -> Option<&Node> {
+  fn find(&self, kid: &KadId) -> Option<Node> {
     let index = self.index(kid);
-    log::debug!("index = {}", index);
-    self.table[index].iter().find(|e| e.id == *kid)
+    let mut table = self.table.lock().unwrap();
+    table[index].clone().into_iter().find(|e| e.id == *kid)
   }
 
   fn closer(&mut self, kid: &KadId) -> Vec<Node> {
-    log::debug!("kid = {}", kid);
     let closest_index = self.index(kid);
-    log::debug!("closest_index = {}", closest_index);
-    let mut nodes = self.table[closest_index].clone();
+    let mut table = self.table.lock().unwrap();
+    let mut nodes = table[closest_index].clone();
     for i in 1..KAD_ID_LEN {
-      let upper = closest_index + i;
-      let lower = closest_index - i;
+      let upper = closest_index as i32 + i as i32;
+      let lower = closest_index as i32 - i as i32;
+      // log::debug!("upper = {}, lower = {}", upper, lower);
       let mut tmp = Vec::<Node>::new();
-      if upper < KAD_ID_LEN {
-        let iter = self.table[upper].clone();
+      if upper < KAD_ID_LEN as i32 {
+        let iter = table[upper as usize].clone();
         tmp.extend(iter);
       }
       if lower >= 0 {
-        tmp.extend(self.table[lower].clone());
+        tmp.extend(table[lower as usize].clone());
       }
       tmp.sort_by(|ia, jb| {
         let i_xor = xor_inner(&ia.id, kid);
@@ -96,15 +105,16 @@ impl RoutingTable for DefaultRoutingTable {
       });
       nodes.extend(tmp);
       if nodes.len() >= BUCKET_SIZE {
-        return nodes.split_off(BUCKET_SIZE - 1);
+        let result = nodes.split_off(BUCKET_SIZE - 1);
+        return result;
       }
     }
+    log::debug!("nodes = {:?}", nodes);
     nodes
   }
 
   fn index(&self, kid: &KadId) -> usize {
     let distance = self.xor(kid);
-    log::debug!("distance = {}", distance);
     let mut first_bit_index = 0;
     for v in distance.get() {
       if *v == 0 {
@@ -242,7 +252,8 @@ mod tests {
       want: true,
       finally: Some(move |rt: &DefaultRoutingTable| {
         let index = rt.index(&node_cloned.id);
-        if let Some(_e) = rt.table[index].first() {
+        let mut table = rt.table.lock().unwrap();
+        if let Some(_e) = table[index].first() {
           (true, "".to_owned())
         } else {
           (false, "".to_owned())
@@ -253,7 +264,7 @@ mod tests {
     for tt in tests {
       let mut rt = DefaultRoutingTable {
         own_id: tt.fields.own_id,
-        table: tt.fields.table,
+        table: Arc::new(Mutex::new(tt.fields.table)),
       };
 
       let got = rt.add(tt.args.node.clone());

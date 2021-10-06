@@ -137,7 +137,6 @@ impl<'de> Deserialize<'de> for KadId {
   {
     let deserialized_str = String::deserialize(deserializer)?;
     let s = KadId::parse_from_hexstr(&deserialized_str).map_err(serde::de::Error::custom);
-    log::debug!("de:s = {:?}", s);
     s
   }
 }

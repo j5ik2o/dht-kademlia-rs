@@ -92,6 +92,6 @@ mod tests {
     };
     let s = serde_json::to_vec(&msg).unwrap();
     let d: KademliaMessage = serde_json::from_slice(&s).unwrap();
-    log::debug!("s = {:?}",d);
+    log::debug!("s = {:?}", d);
   }
 }
