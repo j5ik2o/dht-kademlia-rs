@@ -1,7 +1,7 @@
+use crate::node::{KadId, Node, KAD_ID_LEN, KAD_ID_LEN_BYTES};
 use std::cmp::Ordering;
 use std::fmt::Debug;
 use std::sync::{Arc, Mutex};
-use crate::node::{KAD_ID_LEN, KAD_ID_LEN_BYTES, KadId, Node};
 
 #[derive(Debug, Clone)]
 pub struct DefaultRoutingTable {
@@ -157,8 +157,8 @@ fn xor_inner(kid1: &KadId, kid2: &KadId) -> KadId {
 
 #[cfg(test)]
 mod tests {
-  use std::net::SocketAddr;
   use super::*;
+  use std::net::SocketAddr;
 
   fn init_logger() {
     use std::env;
@@ -224,8 +224,7 @@ mod tests {
   }
   struct Test<F>
   where
-    F: FnMut(&DefaultRoutingTable) -> (bool, String),
-  {
+    F: FnMut(&DefaultRoutingTable) -> (bool, String), {
     name: String,
     fields: Fields,
     args: Args,

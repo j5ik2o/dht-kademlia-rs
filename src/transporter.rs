@@ -1,12 +1,12 @@
 use std::net::{IpAddr, SocketAddr};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use tokio::net::UdpSocket;
-use tokio::sync::Mutex;
 use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::Mutex;
 
 #[async_trait]
 pub trait Transporter: Send + Sync + 'static {
@@ -127,9 +127,9 @@ impl Transporter for UdpTransporter {
 
 #[cfg(test)]
 mod tests {
+  use futures::SinkExt;
   use std::net::{IpAddr, Ipv4Addr};
   use std::time::Duration;
-  use futures::SinkExt;
 
   use tokio::sync::mpsc::channel;
 
@@ -196,8 +196,7 @@ mod tests {
     let mut client_cloned = client.clone();
     tokio::spawn(async move {
       let msg_data = "abc";
-      let msg =
-        Message::new_with_ip_addr_and_port_and_data(LOCAL_IP, SERVER_PORT, Vec::from(msg_data));
+      let msg = Message::new_with_ip_addr_and_port_and_data(LOCAL_IP, SERVER_PORT, Vec::from(msg_data));
       client_cloned.send(msg.clone()).await;
       client_cloned.send(msg.clone()).await;
       client_cloned.send(msg.clone()).await;

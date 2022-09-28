@@ -1,7 +1,7 @@
 #![feature(async_closure)]
+extern crate base64;
 #[cfg(test)]
 extern crate env_logger as logger;
-extern crate base64;
 
 use std::any::Any;
 use std::convert::TryInto;
@@ -9,18 +9,18 @@ use std::hash::Hash;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::Arc;
 
-use crate::node::{ByteArray, KAD_ID_LEN_BYTES, KadId, Node};
+use crate::node::{ByteArray, KadId, Node, KAD_ID_LEN_BYTES};
 
-use crate::transporter::{Message, Transporter, UdpTransporter};
-use anyhow::Result;
-use sha1::Digest;
-use sha1::digest::Update;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
-use tokio::sync::Mutex;
-use ulid_generator_rs::{ULID, ULIDError, ULIDGenerator};
 use crate::datastore::{DataStore, InMemoryDataStore};
 use crate::query::{KademliaMessage, Query, QueryCode};
 use crate::routing_table::{DefaultRoutingTable, RoutingTable};
+use crate::transporter::{Message, Transporter, UdpTransporter};
+use anyhow::Result;
+use sha1::digest::Update;
+use sha1::Digest;
+use tokio::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::Mutex;
+use ulid_generator_rs::{ULIDError, ULIDGenerator, ULID};
 
 pub mod datastore;
 pub mod node;
@@ -47,10 +47,7 @@ unsafe impl Send for Kademlia {}
 impl Kademlia {
   pub fn new(own: Node, data_store: InMemoryDataStore, routing_table: DefaultRoutingTable) -> Self {
     let (msg_tx, msg_rx) = channel(128);
-    let tx = UdpTransporter::new_with_ip_addr_and_port(
-      own.socket_addr.ip().clone(),
-      own.socket_addr.port(),
-    );
+    let tx = UdpTransporter::new_with_ip_addr_and_port(own.socket_addr.ip().clone(), own.socket_addr.port());
     Self {
       own: own.clone(),
       // socket_addr: own.socket_addr.clone(),
@@ -142,11 +139,7 @@ impl Kademlia {
       let km: KademliaMessage = serde_json::from_slice(&msg.data).unwrap();
       match km.query {
         Query::PingQuery { target } => {
-          log::debug!(
-            "Query::PingQuery:target = {:?}, self = {:?}",
-            target,
-            self.own.id
-          );
+          log::debug!("Query::PingQuery:target = {:?}, self = {:?}", target, self.own.id);
           log::debug!("Query::send_ping_reply");
           self
             .send_ping_reply(msg.socket_addr, km.query_sn, self.own.id.clone())
@@ -174,9 +167,7 @@ impl Kademlia {
           self.routing_table.add(km.origin);
           log::debug!("done:self.routing_table.add(km.origin)");
           for node in closest.iter() {
-            log::debug!(
-              "if self.is_not_same_host(node) && self.routing_table.find(&node.id).is_none()"
-            );
+            log::debug!("if self.is_not_same_host(node) && self.routing_table.find(&node.id).is_none()");
             if self.is_not_same_host(node) && self.routing_table.find(&node.id).is_none() {
               log::debug!("send_find_node_query");
               self
@@ -202,14 +193,7 @@ impl Kademlia {
           let kid: KadId = key.clone().try_into().unwrap();
           let closest = self.routing_table.closer(&kid);
           self
-            .send_find_value_reply(
-              msg.socket_addr,
-              km.query_sn,
-              &key,
-              has_value,
-              value,
-              closest,
-            )
+            .send_find_value_reply(msg.socket_addr, km.query_sn, &key, has_value, value, closest)
             .await
             .unwrap();
         }
@@ -225,10 +209,7 @@ impl Kademlia {
           } else {
             if !closest.is_empty() {
               let nex_inquiry_node = &closest[0];
-              self
-                .send_find_value_query(nex_inquiry_node, &key)
-                .await
-                .unwrap();
+              self.send_find_value_query(nex_inquiry_node, &key).await.unwrap();
             }
           }
         }
@@ -248,22 +229,14 @@ impl Kademlia {
     self.own.socket_addr == node.socket_addr
   }
 
-  pub async fn send_kad_msg(
-    &mut self,
-    socket_addr: SocketAddr,
-    target: KademliaMessage,
-  ) -> Result<()> {
+  pub async fn send_kad_msg(&mut self, socket_addr: SocketAddr, target: KademliaMessage) -> Result<()> {
     let data = serde_json::to_vec(&target).unwrap();
     let msg = Message::new_with_socket_addr_and_data(socket_addr, data);
     self.transporter.send(msg).await;
     Ok(())
   }
 
-  pub async fn send_find_node_query(
-    &mut self,
-    socket_addr: SocketAddr,
-    target: KadId,
-  ) -> Result<()> {
+  pub async fn send_find_node_query(&mut self, socket_addr: SocketAddr, target: KadId) -> Result<()> {
     let msg = KademliaMessage {
       origin: self.own.clone(),
       query_sn: self.gen_ulid().await.unwrap(),
@@ -311,9 +284,7 @@ impl Kademlia {
       origin: self.own.clone(),
       query_sn: self.gen_ulid().await.unwrap(),
       code: QueryCode::FindValueQuery,
-      query: Query::FindValueQuery {
-        key: key.to_owned(),
-      },
+      query: Query::FindValueQuery { key: key.to_owned() },
     };
     self.send_kad_msg(node.socket_addr, msg).await
   }
@@ -351,12 +322,7 @@ impl Kademlia {
     self.send_kad_msg(socket_addr, msg).await
   }
 
-  pub async fn send_ping_reply(
-    &mut self,
-    socket_addr: SocketAddr,
-    query_sn: ULID,
-    target: KadId,
-  ) -> Result<()> {
+  pub async fn send_ping_reply(&mut self, socket_addr: SocketAddr, query_sn: ULID, target: KadId) -> Result<()> {
     let msg = KademliaMessage {
       origin: self.own.clone(),
       query_sn,
@@ -369,13 +335,13 @@ impl Kademlia {
 
 #[cfg(test)]
 mod tests {
+  use crate::datastore::InMemoryDataStore;
+  use crate::node::{KadId, Node, KAD_ID_LEN_BYTES};
+  use crate::routing_table::DefaultRoutingTable;
+  use crate::Kademlia;
   use std::convert::TryInto;
   use std::net::SocketAddr;
   use tokio::time::Duration;
-  use crate::datastore::InMemoryDataStore;
-  use crate::Kademlia;
-  use crate::node::{KAD_ID_LEN_BYTES, KadId, Node};
-  use crate::routing_table::DefaultRoutingTable;
 
   fn init_logger() {
     use std::env;

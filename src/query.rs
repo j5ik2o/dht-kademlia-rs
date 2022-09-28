@@ -1,6 +1,6 @@
+use crate::node::{KadId, Node};
 use serde::{Deserialize, Serialize};
 use ulid_generator_rs::ULID;
-use crate::node::{KadId, Node};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct KademliaMessage {
@@ -66,9 +66,9 @@ impl Query {
 
 #[cfg(test)]
 mod tests {
-  use ulid_generator_rs::ULIDGenerator;
   use crate::node::{KadId, Node};
   use crate::query::{KademliaMessage, Query, QueryCode};
+  use ulid_generator_rs::ULIDGenerator;
 
   fn init_logger() {
     use std::env;

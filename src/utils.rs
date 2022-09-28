@@ -1,4 +1,4 @@
-use rand::{RngCore, thread_rng};
+use rand::{thread_rng, RngCore};
 
 use crate::node::KadId;
 

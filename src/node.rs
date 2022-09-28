@@ -3,10 +3,10 @@ use std::fmt::Formatter;
 
 use std::net::{IpAddr, SocketAddr};
 
-use rand::{RngCore, thread_rng};
-use serde::{Serialize, Deserialize, Serializer, Deserializer};
-use sha1::Digest;
+use rand::{thread_rng, RngCore};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use sha1::digest::Update;
+use sha1::Digest;
 
 use thiserror::Error;
 
@@ -124,8 +124,7 @@ impl KadId {
 impl Serialize for KadId {
   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
   where
-    S: Serializer,
-  {
+    S: Serializer, {
     serializer.serialize_str(&self.to_hex())
   }
 }
@@ -133,8 +132,7 @@ impl Serialize for KadId {
 impl<'de> Deserialize<'de> for KadId {
   fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
   where
-    D: Deserializer<'de>,
-  {
+    D: Deserializer<'de>, {
     let deserialized_str = String::deserialize(deserializer)?;
     let s = KadId::parse_from_hexstr(&deserialized_str).map_err(serde::de::Error::custom);
     s
