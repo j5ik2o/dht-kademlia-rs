@@ -275,14 +275,14 @@ mod tests {
 
       let got = rt.add(tt.args.node.clone());
       if got != tt.want {
-        log::warn!("routingTable.add() got = {}, want {}", got, tt.want);
+        log::warn!("routingTable.add() got = {:?}, want {:?}", got, tt.want);
       }
 
       if let Some(f) = tt.finally {
         let (result, msg) = f(&rt);
         assert!(result);
         if !result {
-          log::error!("msg = {}", msg);
+          log::error!("msg = {:?}", msg);
         }
       }
     }

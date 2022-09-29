@@ -354,7 +354,7 @@ mod tests {
   async fn test() {
     init_logger();
 
-    let addr = resolve::resolve_host("127.0.0.1").unwrap().next().unwrap();
+    let addr = resolve::resolve_host("localhost").unwrap().next().unwrap();
     let listen_socket_addr1 = SocketAddr::new(addr, 7005);
     let listen_socket_addr2 = SocketAddr::new(addr, 7006);
     let seed_node_socket_addr = "127.0.0.1:7005".parse::<SocketAddr>().unwrap();
