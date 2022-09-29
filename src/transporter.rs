@@ -140,6 +140,7 @@ mod tests {
   const SERVER_PORT: u16 = 7001;
   const CLIENT_PORT: u16 = 7002;
 
+  #[ctor::ctor]
   fn init_logger() {
     use std::env;
     env::set_var("RUST_LOG", "debug");
@@ -153,7 +154,6 @@ mod tests {
 
   #[tokio::test]
   async fn test_transport() {
-    init_logger();
     let (server_tx, mut server_rx) = channel::<Message>(128);
     let (client_tx, mut client_rx) = channel::<Message>(128);
 

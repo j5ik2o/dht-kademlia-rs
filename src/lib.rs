@@ -284,7 +284,7 @@ impl Kademlia {
       origin: self.own.clone(),
       query_sn: self.gen_ulid().await.unwrap(),
       code: QueryCode::FindValueQuery,
-      query: Query::FindValueQuery { key: key.to_owned() },
+      query: Query::FindValueQuery { key: key.to_string() },
     };
     self.send_kad_msg(node.socket_addr, msg).await
   }
@@ -343,6 +343,7 @@ mod tests {
   use std::net::SocketAddr;
   use tokio::time::Duration;
 
+  #[ctor::ctor]
   fn init_logger() {
     use std::env;
     env::set_var("RUST_LOG", "debug");
@@ -352,8 +353,6 @@ mod tests {
 
   #[tokio::test]
   async fn test() {
-    init_logger();
-
     let addr = resolve::resolve_host("localhost").unwrap().next().unwrap();
     let listen_socket_addr1 = SocketAddr::new(addr, 7005);
     let listen_socket_addr2 = SocketAddr::new(addr, 7006);
@@ -367,8 +366,8 @@ mod tests {
     own_id_v2[0] = 0x02;
     let node2 = Node::new(KadId::new(own_id_v2), listen_socket_addr2);
 
-    println!("node1 = {:?}", node1);
-    println!("node2 = {:?}", node2);
+    log::debug!("node1 = {:?}", node1);
+    log::debug!("node2 = {:?}", node2);
 
     let mut kad1 = Kademlia::new(
       node1.clone(),

@@ -70,6 +70,7 @@ mod tests {
   use crate::query::{KademliaMessage, Query, QueryCode};
   use ulid_generator_rs::ULIDGenerator;
 
+  #[ctor::ctor]
   fn init_logger() {
     use std::env;
     env::set_var("RUST_LOG", "debug");
@@ -79,7 +80,6 @@ mod tests {
 
   #[test]
   fn test() {
-    init_logger();
     let mut gen = ULIDGenerator::new();
     let id = gen.generate().unwrap();
     let msg = KademliaMessage {

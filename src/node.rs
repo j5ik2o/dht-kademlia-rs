@@ -1,6 +1,7 @@
 use std::convert::{Infallible, TryFrom, TryInto};
 use std::fmt::Formatter;
 
+use futures::TryFutureExt;
 use std::net::{IpAddr, SocketAddr};
 
 use rand::{thread_rng, RngCore};
@@ -170,6 +171,7 @@ impl Node {
 mod tests {
   use super::*;
 
+  #[ctor::ctor]
   fn init_logger() {
     use std::env;
     env::set_var("RUST_LOG", "debug");
@@ -179,7 +181,6 @@ mod tests {
 
   #[test]
   fn test_kid() {
-    init_logger();
     let mut own_id = [0x00; KAD_ID_LEN_BYTES];
     own_id[0] = 0x01;
     let kid = KadId::new(own_id);
@@ -192,7 +193,6 @@ mod tests {
 
   #[test]
   fn test_node() {
-    init_logger();
     let kid = KadId::generate();
     let node1 = Node::new(kid, "127.0.0.1:3330".parse::<SocketAddr>().unwrap());
     let s = serde_json::to_string(&node1).unwrap();

@@ -160,6 +160,7 @@ mod tests {
   use super::*;
   use std::net::SocketAddr;
 
+  #[ctor::ctor]
   fn init_logger() {
     use std::env;
     env::set_var("RUST_LOG", "debug");
@@ -169,7 +170,6 @@ mod tests {
 
   #[test]
   fn test_xor() {
-    init_logger();
     let k1_v = [0x00; KAD_ID_LEN_BYTES];
     let mut k2_v = [0xFF; KAD_ID_LEN_BYTES];
     k2_v[0] = 0xFE;
@@ -187,7 +187,6 @@ mod tests {
 
   #[test]
   fn test_index() {
-    init_logger();
     let own_id_v = [0x00; KAD_ID_LEN_BYTES];
     let own_id = KadId::new(own_id_v);
 
@@ -234,7 +233,6 @@ mod tests {
 
   #[test]
   fn test_add() {
-    init_logger();
     let mut own_id_v = [0x00; KAD_ID_LEN_BYTES];
     own_id_v[0] = 0x01;
     let own_id = KadId::new(own_id_v);

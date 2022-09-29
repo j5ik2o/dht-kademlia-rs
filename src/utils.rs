@@ -52,6 +52,7 @@ fn generate_random_kad_id() -> KadId {
 mod tests {
   use crate::utils::get_ip_list;
 
+  #[ctor::ctor]
   fn init_logger() {
     use std::env;
     env::set_var("RUST_LOG", "debug");
@@ -61,7 +62,6 @@ mod tests {
 
   #[test]
   fn test_get_ip_list() {
-    init_logger();
     let ip_list = get_ip_list();
     let first = ip_list.first().unwrap();
     log::debug!("first = {}", first);
