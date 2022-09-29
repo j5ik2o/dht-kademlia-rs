@@ -17,7 +17,6 @@ use tokio::sync::mpsc::{channel, Receiver, Sender};
 use tokio::sync::Mutex;
 use ulid_generator_rs::{ULIDError, ULIDGenerator, ULID};
 
-
 #[derive(Clone)]
 pub struct Kademlia {
   own: Node,
